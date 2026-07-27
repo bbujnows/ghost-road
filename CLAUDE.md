@@ -4,10 +4,18 @@ An Appalachian folk-horror tower defense. Seven nights defending a homestead at 
 abandoned logging road. **Kara — a gold Labrador/pit mix with white paws, belly, and chest — is
 the centerpiece of the design, not a bonus unit.**
 
-## Status: skeleton, design doc complete
+## Status: §13 steps 1–2 built
 
-The code is still a skeleton — it mounts Pixi inside React, establishes the render layering, and
-demonstrates the lightmap. **There is no gameplay in it yet.**
+Playable: the light bands, one Lantern Post, Road Walkers, Night 1's three waves, lamp oil,
+homestead HP, and Normal-mode retry. Kara is on the board and walks, but **has none of her
+abilities yet** — those are step 3.
+
+Not built: every other ward, every other enemy, fog, bond, stash, toys, nights 2–7, Hard mode,
+endless, audio. Do not add them ahead of the build order in §13 of the design doc.
+
+**`src/game/balance.ts` holds every number the doc specifies**, each citing its section. Change a
+value there and change it in the doc too — the doc is the source of truth, that file is its
+transcription. If a number is in neither, it has not been decided; ask rather than invent.
 
 **[docs/design-doc.md](docs/design-doc.md) is the source of truth for everything else** — the
 light bands, Kara's commands and cooldowns, the toy list, the wards, the seven nights and their
@@ -58,11 +66,14 @@ permadeath mode.
 
 ```
 src/game/
-  Game.ts       Pixi mount, render layering, ticker, input plumbing. No gameplay.
-  lighting.ts   the lightmap (RenderTexture + multiply overlay) and lightAt() queries
+  balance.ts    every doc-specified number, each citing its section
+  Game.ts       orchestrator — waves, oil, homestead HP, input, HUD state bridge
+  lighting.ts   the lightmap, the four bands, lightAt() and radiusForThreshold()
+  enemies.ts    RoadWalker only
+  wards.ts      Lantern only
   kara.ts       Kara's appearance and walking. None of her abilities.
-  world.ts      throwaway placeholder scene so the lightmap has a surface
-src/ui/         placeholder React HUD overlay, pointer-events: none
+  world.ts      placeholder scene geometry, plus the road polyline (load-bearing)
+src/ui/         React HUD overlay, pointer-events: none
 ```
 
 **Rendering layers, in order:** `scene` → `lighting.overlay` (multiply) → `foreground`.
@@ -70,9 +81,13 @@ Anything that must stay visible in the dark goes in `foreground` — that is whe
 markings live, and why she reads as four pale paws moving through the black. This is the one
 architectural decision already made, and it is the reason the skeleton is worth keeping.
 
-`LightingSystem.lightAt(x, y)` is a cheap analytic approximation of the rendered lightmap.
-Gameplay queries it; the shader is never read back. If you change the gradient falloff in
-`radialGradient()`, change `lightAt()` to match or they will disagree.
+`LightingSystem.lightAt(x, y)` is an analytic CPU evaluation of the same falloff the gradient
+texture encodes. Gameplay queries it; the GPU lightmap is never read back. They are kept honest by
+generating the gradient's colour stops from `FALLOFF_EXPONENT` — change the exponent and both move.
+
+**A light's `radius` is not its pool size.** At the doc's falloff a lantern (`radius 150,
+intensity 0.85`) is Lit only to 77px and invisible past 118px. Use `radiusForThreshold()` for
+anything player-facing; never draw the raw radius.
 
 ## Commands
 

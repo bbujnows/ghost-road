@@ -5,11 +5,18 @@ abandoned logging road, with a dog named Kara.
 
 ## Status
 
-**Skeleton. There is no game here yet.**
+**Night 1 is playable.** Light bands, Lantern Posts, Road Walkers, three waves, lamp oil, and a
+homestead that can fall. Kara is on the board but has none of her abilities yet.
 
-What exists is the stack wired up and running: Pixi mounted inside React, the render layering
-established, and a working lightmap you can walk Kara around in. Click to move her, Space to
-pause.
+| Input | Action |
+| --- | --- |
+| Left click | Place a Lantern Post (30 oil) |
+| Right click | Send Kara |
+| `Space` | Pause |
+| `R` | Retry the night, after a loss |
+
+Enemies in the dark are **invisible and cannot be hurt**. A lantern's damageable pool is much
+smaller than its glow — the placement preview's inner ring is what you're actually buying.
 
 The design is done and lives in **[docs/design-doc.md](docs/design-doc.md)** — light bands,
 Kara's full command set, the toy loadout, the wards and their synergies, seven nights of bosses,

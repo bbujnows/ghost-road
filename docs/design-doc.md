@@ -1,6 +1,6 @@
 # Ghost Road — Design Document
 
-**Version 1.0 · 2026-07-27**
+**Version 1.2 · 2026-07-27**
 
 An Appalachian folk-horror tower defense. Seven nights defending a homestead at the end of an
 abandoned logging road. Kara — a gold Labrador/pit mix with white paws, belly, and chest — is the
@@ -213,6 +213,7 @@ Wards, not guns. Nothing in this game shoots.
 | Ward | Oil | Function |
 | --- | --- | --- |
 | **Lantern Post** | 30 | `intensity 0.85, radius 150`. Deals **14 damage / 0.55s** to one Lit target in radius. The only damage source that scales. |
+| | | ⚠️ **Radius is not pool size.** Under the §2.2 falloff, a lantern is Bright only to **21px**, Lit to **77px**, and Dim to **118px** — past that its own light is below the visibility floor. The 150 is the outer bound of any contribution, not what the player gets. The placement preview must draw 77 and 118, never 150. |
 | **Salt Line** | 20 | Not a light. A drawn segment up to 140px. Crossing costs 25 damage and 50% slow for 2s. **Depletes after 6 crossings.** Works in full dark. |
 | **Church Bell** | 65 | One per map. Activated, 45s cooldown. Staggers every enemy on screen 2.5s and forces them to Dim band for 6s. |
 | **Fiddler** | 55 | Porch-bound. 260px aura, three switchable tunes (8s to change). Flees if an enemy comes within 120px. |
@@ -256,6 +257,31 @@ any instant with Space; auto-pauses on tab blur; state saves to `localStorage` a
 | **Drownd Girl** | Immune to salt. Cannot cross running water at all — the spring line is a hard wall. |
 | **Hant Cat** | Leaps salt lines entirely. |
 | **The Fetch** | A copy of Kara. Same silhouette, same gait — **but no white markings.** You identify the real dog by her four pale paws. |
+
+### Enemy stats
+
+Only the Road Walker is specified so far; the rest get numbers as they are built.
+
+| Enemy | HP | Speed | Porch damage |
+| --- | --- | --- | --- |
+| **Road Walker** | 60 | 30 px/s | 8 |
+
+The Road Walker's numbers are derived rather than picked. A lantern does `14 / 0.55 ≈ 25.5` dps,
+and a walker crossing a lantern's 154px Lit chord at 30 px/s is exposed for **5.1 seconds**, taking
+**130 damage**. At 60 HP that is comfortably two walkers killed per lantern per pass — so a single
+lantern handles a trickle and is overwhelmed by a group, which is the entire Night 1 lesson. Tune
+by moving HP against that 130, not in isolation.
+
+**Night 1 pacing**, at the road's measured 1070px (35.7s traverse):
+
+| Wave | Walkers | Gap | Duration |
+| --- | --- | --- | --- |
+| 1 | 6 | 4.0s | 55.7s |
+| 2 | 8 | 3.5s | 60.2s |
+| 3 | 10 | 3.0s | 62.7s |
+
+Night total **3:27** including the 12s breaks — inside the 5-minute budget with room for the later
+nights to grow.
 
 ### Night structure
 
