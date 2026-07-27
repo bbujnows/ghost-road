@@ -102,6 +102,24 @@ is Dim — it reveals, it does not damage. **But a bubble drifting through hose 
 damage-enabling corridor. This was not designed in; it fell out of the scattering rule, and it is
 worth keeping.
 
+### 2.6 The homestead's own light
+
+The house is lit for free, by four sources it owns: a broad porch light, a hung lantern by the
+door, and the two windows. Together they put the cabin, porch, and yard in the **Bright** band, and
+they reach **the last 190px of road — 17.4% of it**.
+
+Two reasons this is not a giveaway:
+
+- **The thing being defended must always be legible.** A player who cannot see the homestead cannot
+  read how the night is going. Its window glow is drawn into an emissive layer *above* the darkness
+  overlay, for the same reason Kara's white markings are.
+- **17.4% is the free tier, not a defence.** It buys about six seconds of visibility at the very
+  end of the walk, with no ward attached. Everything above the yard costs oil.
+
+The visual darkness of unlit ground (`AMBIENT_COLOR`) is deliberately separate from the gameplay
+value (`AMBIENT_LIGHT = 0.08`). Enemy visibility is gated on the band, never on the render colour,
+so the scene can be made legible without weakening the mechanic. **Tune the two independently.**
+
 ---
 
 ## 3. Kara

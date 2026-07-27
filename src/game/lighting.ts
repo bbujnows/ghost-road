@@ -64,8 +64,12 @@ export function radiusForThreshold(light: Pick<Light, 'radius' | 'intensity'>, t
   return light.radius * (1 - Math.pow(needed / light.intensity, 1 / FALLOFF_EXPONENT))
 }
 
-/** How darkness reads on screen. Never pure black — the hollow always has some moon. */
-const AMBIENT_COLOR = 0x0e161c
+/**
+ * How darkness *reads on screen*, which is separate from AMBIENT_LIGHT (the gameplay
+ * value). Raising this makes the hollow legible without weakening the mechanic: enemy
+ * visibility is gated on the band, not on this colour, so the dark still hides them.
+ */
+const AMBIENT_COLOR = 0x1a262c
 
 let gradientTexture: Texture | null = null
 

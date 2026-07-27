@@ -15,6 +15,7 @@ import { LightingSystem, bandOf, radiusForThreshold } from './lighting'
 import type { Band } from './lighting'
 import { Lantern } from './wards'
 import { HOMESTEAD, buildScene } from './world'
+import type { Smoke } from './world'
 
 export const WORLD_WIDTH = 1280
 export const WORLD_HEIGHT = 720
@@ -62,6 +63,7 @@ export class Game {
   private foreground = new Container()
 
   private kara!: Kara
+  private smoke!: Smoke
   private walkers: RoadWalker[] = []
   private lanterns: Lantern[] = []
   private preview = new Graphics()
@@ -110,18 +112,19 @@ export class Game {
     host.appendChild(this.app.canvas)
 
     this.lighting = new LightingSystem(WORLD_WIDTH, WORLD_HEIGHT)
-    this.scene.addChild(buildScene(WORLD_WIDTH, WORLD_HEIGHT))
 
-    // The porch light. The only light the player starts with, and it covers the last
-    // few metres of road only — everything above it is dark until they pay for it.
-    this.lighting.add({
-      x: HOMESTEAD.x,
-      y: HOMESTEAD.y - 36,
-      radius: 190,
-      color: 0xffc078,
-      intensity: 0.5,
-      flicker: 0.04,
-    })
+    const built = buildScene(WORLD_WIDTH, WORLD_HEIGHT)
+    this.scene.addChild(built.scene)
+    this.smoke = built.smoke
+
+    // The homestead's own windows and porch lantern. The only light the player starts
+    // with, and it reaches the last stretch of road only — everything above it is dark
+    // until they pay for it.
+    for (const light of built.lights) this.lighting.add(light)
+
+    // Window and lantern glow, above the darkness so the thing you are defending is
+    // always legible — the same reason Kara's white markings live up here.
+    this.foreground.addChild(built.emissive)
 
     this.kara = new Kara(HOMESTEAD.x - 100, HOMESTEAD.y - 20)
     this.scene.addChild(this.kara.body)
@@ -338,6 +341,8 @@ export class Game {
       this.phase === 'complete'
 
     if (frozen) {
+      // The chimney keeps going. The house is still lived in, even on the pause screen.
+      this.smoke.update(dt)
       this.lighting.update(this.app.renderer, dt)
       this.drawPreview()
       this.publish()
@@ -395,6 +400,7 @@ export class Game {
     }
 
     this.kara.update(dt, this.lighting)
+    this.smoke.update(dt)
     this.lighting.update(this.app.renderer, dt)
     this.drawPreview()
     this.publish()
