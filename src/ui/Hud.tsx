@@ -1,17 +1,17 @@
 import type { GameState } from '../game/Game'
-import { OIL_PER_LIT_KILL, ROAD_WALKER } from '../game/balance'
+import { OIL_PER_LIT_KILL, OIL_PER_WAVE, ROAD_WALKER } from '../game/balance'
 import './hud.css'
 
 const BAND_LABEL = {
   dark: 'dark · invisible, cannot be hurt',
   dim: 'dim · you can see it, not hurt it',
   lit: 'lit · your lanterns can kill it',
-  bright: 'bright · +25% damage',
 } as const
 
 const CONTROLS = [
   { key: 'Left click', label: 'Place a lantern' },
   { key: 'Right click', label: 'Send Kara' },
+  { key: 'F', label: 'Fast-forward' },
   { key: 'Space', label: 'Pause' },
   { key: '?', label: 'Help' },
 ]
@@ -22,6 +22,7 @@ export interface HudProps {
   onToggleHelp: () => void
   onResume: () => void
   onRestart: () => void
+  onToggleSpeed: () => void
 }
 
 /**
@@ -68,18 +69,14 @@ function Rules({ state }: { state: GameState }) {
         cannot be hurt at all. Light is not scenery here — it is the weapon.
       </li>
       <li>
-        <strong>A lantern costs {state.lanternCost} oil.</strong> Its glow is wider than its reach:
-        the <span className="ring-lit">inner ring</span> is where it can actually kill, the{' '}
-        <span className="ring-dim">outer ring</span> is only where you can see. Aim the inner ring
-        at the road.
+        <strong>A lantern costs {state.lanternCost} oil.</strong> The{' '}
+        <span className="ring-lit">inner ring</span> is where it can kill, the{' '}
+        <span className="ring-dim">outer ring</span> is where you can merely see. Aim the inner
+        ring at the road.
       </li>
       <li>
-        <strong>Overlap two lanterns</strong> and the ground between them burns brighter — anything
-        standing there takes 25% more damage.
-      </li>
-      <li>
-        <strong>Kills in the light pay {OIL_PER_LIT_KILL} oil.</strong> Anything that reaches the
-        porch pays nothing. You fund the next lantern by earning it.
+        <strong>Every wave you survive pays {OIL_PER_WAVE} oil</strong>, and each kill in the
+        light adds {OIL_PER_LIT_KILL} more. Anything that reaches the porch pays nothing.
       </li>
       <li>
         <strong>Kara can't help yet.</strong> Right click walks her anywhere, and she is the one
@@ -90,7 +87,7 @@ function Rules({ state }: { state: GameState }) {
   )
 }
 
-export function Hud({ state, onBegin, onToggleHelp, onResume, onRestart }: HudProps) {
+export function Hud({ state, onBegin, onToggleHelp, onResume, onRestart, onToggleSpeed }: HudProps) {
   if (!state) return null
 
   const hpPct = (state.homesteadHp / state.homesteadMaxHp) * 100
@@ -129,9 +126,19 @@ export function Hud({ state, onBegin, onToggleHelp, onResume, onRestart }: HudPr
           <span className="sub">{ROAD_WALKER.hp} hp each</span>
         </div>
 
-        <button type="button" className="help-btn" onClick={onToggleHelp}>
-          ?
-        </button>
+        <div className="top-buttons">
+          <button
+            type="button"
+            className={`speed-btn ${state.speed > 1 ? 'active' : ''}`}
+            onClick={onToggleSpeed}
+            title="Fast-forward (F)"
+          >
+            {state.speed > 1 ? '2×' : '1×'}
+          </button>
+          <button type="button" className="help-btn" onClick={onToggleHelp}>
+            ?
+          </button>
+        </div>
       </div>
 
       <div className="hud-bottom">
@@ -160,7 +167,12 @@ export function Hud({ state, onBegin, onToggleHelp, onResume, onRestart }: HudPr
       </div>
 
       {state.phase === 'break' && state.breakRemaining > 0 && (
-        <div className="banner">Next wave in {Math.ceil(state.breakRemaining)}</div>
+        <div className="banner">
+          Next wave in {Math.ceil(state.breakRemaining)}
+          {state.nextWaveCount > 0 && (
+            <span className="banner-detail"> — {state.nextWaveCount} coming down the road</span>
+          )}
+        </div>
       )}
 
       {state.phase === 'briefing' && (

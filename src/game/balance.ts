@@ -8,19 +8,22 @@
  */
 
 // ─── §2.1 The three bands ───────────────────────────────────────────────────
+// The Bright band was cut by the 2026-07-27 consultation ruling: +25% inside a
+// 21px ring only ever rewarded overlap, which was already dominant.
 
 export const AMBIENT_LIGHT = 0.08
 export const BAND_DIM = 0.15
 export const BAND_LIT = 0.35
-export const BAND_BRIGHT = 0.75
-
-/** §2.4 Bright band pays a damage bonus, to reward overlapping lanterns. */
-export const BRIGHT_DAMAGE_BONUS = 1.25
 
 // ─── §2.2 Accumulation and falloff ──────────────────────────────────────────
 
-/** Hot core, long soft tail. Must match the gradient texture in lighting.ts. */
-export const FALLOFF_EXPONENT = 1.6
+/**
+ * Flat-core falloff (2026-07-27 ruling): full intensity out to this fraction of a
+ * light's radius, then a smoothstep to zero at the edge. The old ^1.6 exponent made
+ * authored numbers lie — radius 150 delivered a 77px kill zone. Under flat-core the
+ * same lantern delivers lit to 127px and visible to 139px: authored ≈ delivered.
+ */
+export const FALLOFF_CORE = 0.6
 /** L is multiplied by (1 − FOG_PENALTY × fogDensity). */
 export const FOG_PENALTY = 0.5
 
@@ -54,30 +57,36 @@ export const PORCH_DAMAGE = {
 } as const
 
 // ─── §9 The ball stash economy ──────────────────────────────────────────────
+// 2026-07-27 ruling: kills accelerate, they never gate. The old kills-only economy
+// was a death spiral — a bad opening was unrecoverable by construction.
 
-export const OIL_PER_LIT_KILL = 6
-export const NIGHT_1_STARTING_OIL = 90
+/** Guaranteed, paid when a wave is cleared. The worst-case player can still build. */
+export const OIL_PER_WAVE = 25
+export const OIL_PER_LIT_KILL = 4
+export const NIGHT_1_STARTING_OIL = 75
 
 // ─── §6 Enemy roster ────────────────────────────────────────────────────────
 
 /**
- * A lantern does 14 / 0.55s ≈ 25.5 dps and a walker is exposed for 5.1s crossing one
- * lantern's 154px Lit chord, so a single lantern deals ~130 damage per pass.
- *
- * 120 HP makes that **one pass, one kill, with almost no margin** — which is the
- * number that makes the lighting puzzle exist. At the original 60 the pass overkilled
- * by 2x, so two overlapping lanterns killed in half a second and the Bright band bonus
- * never mattered: overlapping was strictly better than spreading, and the central
- * decision of the game collapsed.
+ * INTERIM number for the feel week, verified by simulation: under flat-core falloff a
+ * walker dwells ~7.7s in one lantern's lit chord (max ~196 damage), so 190 HP is a
+ * one-lantern kill with ~10% margin. Retuned again at build-order step 3 when the
+ * roster splits and lanterns stop dealing damage — do not polish this value before
+ * then.
  */
 export const ROAD_WALKER = {
-  hp: 120,
+  hp: 190,
   speed: 30,
   radius: 9,
   color: 0x8fa9b8,
   /** Seconds the body takes to fall and fade. Purely presentation. */
   deathDuration: 0.85,
 } as const
+
+// ─── Session ────────────────────────────────────────────────────────────────
+
+/** Fast-forward multiplier. Near-universal in the genre; toggled with F. */
+export const FAST_FORWARD = 2
 
 // ─── §3 Kara ────────────────────────────────────────────────────────────────
 

@@ -1,14 +1,6 @@
 import { Container, Graphics, RenderTexture, Sprite, Texture } from 'pixi.js'
 import type { Renderer } from 'pixi.js'
-import {
-  AMBIENT_LIGHT,
-  BAND_BRIGHT,
-  BAND_DIM,
-  BAND_LIT,
-  BRIGHT_DAMAGE_BONUS,
-  FALLOFF_EXPONENT,
-  FOG_PENALTY,
-} from './balance'
+import { AMBIENT_LIGHT, BAND_DIM, BAND_LIT, FALLOFF_CORE, FOG_PENALTY } from './balance'
 
 /**
  * The lightmap. See design-doc §2.
@@ -31,37 +23,51 @@ export interface Light {
   flicker?: number
 }
 
-/** §2.1. The band a point falls in decides visibility and whether wards can hurt it. */
-export type Band = 'dark' | 'dim' | 'lit' | 'bright'
+/**
+ * §2.1. The band a point falls in decides visibility and whether wards can hurt it.
+ * Three bands — Bright was cut by the 2026-07-27 ruling.
+ */
+export type Band = 'dark' | 'dim' | 'lit'
 
 export function bandOf(L: number): Band {
   if (L < BAND_DIM) return 'dark'
   if (L < BAND_LIT) return 'dim'
-  if (L < BAND_BRIGHT) return 'lit'
-  return 'bright'
+  return 'lit'
 }
 
 /** Damage multiplier for a band. Dark and dim deal nothing at all. */
 export function damageMultiplier(band: Band): number {
-  if (band === 'bright') return BRIGHT_DAMAGE_BONUS
-  if (band === 'lit') return 1
-  return 0
+  return band === 'lit' ? 1 : 0
+}
+
+/** §2.2 flat-core falloff: 1 inside the core, smoothstep to 0 at the radius. */
+export function falloffAt(d: number, radius: number): number {
+  if (d >= radius) return 0
+  const core = FALLOFF_CORE * radius
+  if (d <= core) return 1
+  const t = (d - core) / (radius - core)
+  return 1 - (3 * t * t - 2 * t * t * t)
 }
 
 /**
- * The distance at which a single light on its own falls to `threshold`.
- *
- * Worth knowing that these are much smaller than the light's nominal radius: a
- * lantern at `radius 150, intensity 0.85` is only damageable out to ~77px and only
- * visible out to ~118px. The radius is the outer bound of *any* contribution, not the
- * size of the pool the player gets. The placement preview draws these, not the radius,
- * because otherwise nobody can tell what they are buying.
+ * The distance at which a single light on its own falls to `threshold`. Inverts
+ * `falloffAt` by bisection. Under flat-core the delivered radii sit close to the
+ * authored one (lit ~85% of radius for a lantern) — but the placement preview still
+ * draws these, never the raw radius, so the promise stays honest if tuning changes.
  */
 export function radiusForThreshold(light: Pick<Light, 'radius' | 'intensity'>, threshold: number): number {
-  const needed = threshold - AMBIENT_LIGHT
+  const needed = (threshold - AMBIENT_LIGHT) / light.intensity
   if (needed <= 0) return light.radius
-  if (needed > light.intensity) return 0
-  return light.radius * (1 - Math.pow(needed / light.intensity, 1 / FALLOFF_EXPONENT))
+  if (needed > 1) return 0
+
+  let lo = 0
+  let hi = light.radius
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2
+    if (falloffAt(mid, light.radius) > needed) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
 }
 
 /**
@@ -74,8 +80,8 @@ const AMBIENT_COLOR = 0x1a262c
 let gradientTexture: Texture | null = null
 
 /**
- * A soft white radial falloff matching (1 − d/r)^FALLOFF_EXPONENT, sampled into
- * colour stops so the render and `lightAt()` cannot drift apart.
+ * A soft white radial gradient sampled from `falloffAt`, so the render and
+ * `lightAt()` cannot drift apart — both read the same curve.
  */
 function radialGradient(): Texture {
   if (gradientTexture) return gradientTexture
@@ -91,7 +97,7 @@ function radialGradient(): Texture {
   const STOPS = 32
   for (let i = 0; i <= STOPS; i++) {
     const t = i / STOPS
-    const a = Math.pow(1 - t, FALLOFF_EXPONENT)
+    const a = falloffAt(t, 1)
     g.addColorStop(t, `rgba(255,255,255,${a.toFixed(4)})`)
   }
 
@@ -150,7 +156,7 @@ export class LightingSystem {
       const dy = y - l.y
       const d = Math.sqrt(dx * dx + dy * dy)
       if (d >= l.radius) continue
-      total += l.intensity * Math.pow(1 - d / l.radius, FALLOFF_EXPONENT)
+      total += l.intensity * falloffAt(d, l.radius)
     }
 
     return Math.min(1, total) * (1 - FOG_PENALTY * this.fogDensity)

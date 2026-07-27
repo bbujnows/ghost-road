@@ -105,6 +105,81 @@ export class Motes {
   }
 }
 
+/**
+ * Hit and kill feedback. Analog, not arithmetic — the consult doc's call, and the
+ * horror tone agrees: no damage numbers, just embers and light.
+ */
+export class Sparks {
+  /** Add to the bloom source so everything here glows. */
+  readonly gfx = new Graphics()
+
+  private embers: { x: number; y: number; vx: number; vy: number; life: number }[] = []
+  private wisps: { x: number; y: number; sx: number; sy: number; cx: number; cy: number; t: number }[] = []
+  private readonly target: { x: number; y: number }
+
+  /** `target` is where kill-wisps fly — roughly under the HUD's oil counter. */
+  constructor(target: { x: number; y: number }) {
+    this.target = target
+  }
+
+  /** A lantern tick landing: a small burst of embers off the thing that was hit. */
+  burst(x: number, y: number) {
+    if (this.embers.length > 120) return
+    const n = 4 + Math.floor(Math.random() * 3)
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2
+      const speed = 18 + Math.random() * 32
+      this.embers.push({
+        x,
+        y: y - 14,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed - 24,
+        life: 0.5 + Math.random() * 0.3,
+      })
+    }
+  }
+
+  /** A kill paying out: one mote of lamplight arcs to the oil counter. */
+  wisp(x: number, y: number) {
+    if (this.wisps.length > 20) return
+    this.wisps.push({
+      x,
+      y,
+      sx: x,
+      sy: y,
+      // Control point bows the path upward so the arc reads as a throw, not a beeline.
+      cx: (x + this.target.x) / 2 + (Math.random() - 0.5) * 120,
+      cy: Math.min(y, this.target.y) - 120 - Math.random() * 60,
+      t: 0,
+    })
+  }
+
+  update(dt: number) {
+    this.gfx.clear()
+
+    for (const e of this.embers) {
+      e.life -= dt
+      e.x += e.vx * dt
+      e.y += e.vy * dt
+      e.vy += 30 * dt
+      this.gfx.circle(e.x, e.y, 1.3 + e.life).fill({ color: 0xffb060, alpha: Math.max(0, e.life) })
+    }
+    this.embers = this.embers.filter((e) => e.life > 0)
+
+    for (const w of this.wisps) {
+      w.t = Math.min(1, w.t + dt / 0.7)
+      const t = w.t
+      const u = 1 - t
+      w.x = u * u * w.sx + 2 * u * t * w.cx + t * t * this.target.x
+      w.y = u * u * w.sy + 2 * u * t * w.cy + t * t * this.target.y
+      const fade = t > 0.75 ? (1 - t) / 0.25 : 1
+      this.gfx.circle(w.x, w.y, 3).fill({ color: 0xffd9a0, alpha: 0.9 * fade })
+      this.gfx.circle(w.x, w.y, 6.5).fill({ color: 0xffc078, alpha: 0.25 * fade })
+    }
+    this.wisps = this.wisps.filter((w) => w.t < 1)
+  }
+}
+
 /** Darkens the corners so the eye stays on the road. */
 export function vignette(width: number, height: number): Sprite {
   const canvas = document.createElement('canvas')

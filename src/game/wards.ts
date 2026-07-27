@@ -80,7 +80,7 @@ export class Lantern {
     this.flame.position.x = Math.sin(this.sway) * 1.2
   }
 
-  update(dt: number, walkers: RoadWalker[], lighting: LightingSystem) {
+  update(dt: number, walkers: RoadWalker[], lighting: LightingSystem): { x: number; y: number } | undefined {
     // Clamped at zero. Left to run negative while idle, the lantern banks readiness
     // and lands a free shot the instant anything crosses into its light.
     this.cooldown = Math.max(0, this.cooldown - dt)
@@ -115,5 +115,7 @@ export class Lantern {
 
     best.applyDamage(LANTERN.damage, lighting)
     this.cooldown = LANTERN.fireInterval
+    // Where the hit landed, so the game can throw embers off it.
+    return { x: best.x, y: best.y }
   }
 }

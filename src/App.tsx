@@ -34,6 +34,7 @@ export default function App() {
   const toggleHelp = useCallback(() => gameRef.current?.toggleHelp(), [])
   const resume = useCallback(() => gameRef.current?.resume(), [])
   const restart = useCallback(() => gameRef.current?.restart(), [])
+  const toggleSpeed = useCallback(() => gameRef.current?.toggleSpeed(), [])
 
   return (
     <div className="app">
@@ -45,6 +46,7 @@ export default function App() {
           onToggleHelp={toggleHelp}
           onResume={resume}
           onRestart={restart}
+          onToggleSpeed={toggleSpeed}
         />
       </div>
     </div>

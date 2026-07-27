@@ -3,14 +3,16 @@ import {
   BAND_DIM,
   BAND_LIT,
   EAR_PERK_LEAD,
+  FAST_FORWARD,
   HOMESTEAD_MAX_HP,
   LANTERN,
   NIGHT_1_STARTING_OIL,
   NIGHT_1_WAVES,
   OIL_PER_LIT_KILL,
+  OIL_PER_WAVE,
   WAVE_BREAK,
 } from './balance'
-import { Bloom, Motes, vignette } from './atmosphere'
+import { Bloom, Motes, Sparks, vignette } from './atmosphere'
 import { Corpse, RoadWalker } from './enemies'
 import { Kara } from './kara'
 import type { Threat } from './kara'
@@ -38,6 +40,10 @@ export interface GameState {
   breakRemaining: number
   paused: boolean
   helpOpen: boolean
+  /** 1 or FAST_FORWARD. */
+  speed: number
+  /** What the break is counting down to — count of walkers in the coming wave. */
+  nextWaveCount: number
   lightUnderCursor: number
   bandUnderCursor: Band
   /** Null when a lantern can be placed under the cursor. */
@@ -84,6 +90,8 @@ export class Game {
   private oil = NIGHT_1_STARTING_OIL
   private paused = false
   private helpOpen = false
+  private speed: number = 1
+  private sparks!: Sparks
 
   private pointer = { x: WORLD_WIDTH / 2, y: WORLD_HEIGHT / 2 }
   private stateHandler: ((s: GameState) => void) | null = null
@@ -140,6 +148,11 @@ export class Game {
     this.bloom.source.addChild(this.kara.markings)
 
     this.motes = new Motes(WORLD_WIDTH, WORLD_HEIGHT)
+
+    // Hit embers and kill wisps. They live in the bloom source so they glow; wisps
+    // arc toward the point under the HUD's oil counter.
+    this.sparks = new Sparks({ x: 330, y: 46 })
+    this.bloom.source.addChild(this.sparks.gfx)
 
     // Above the darkness overlay, so the player can see where the pool will land.
     this.foreground.addChild(this.motes.container, this.preview)
@@ -198,6 +211,8 @@ export class Game {
       if (key === ' ') {
         e.preventDefault()
         this.setPaused(!this.paused)
+      } else if (key === 'f') {
+        this.toggleSpeed()
       } else if (key === '?' || key === '/' || key === 'h') {
         this.toggleHelp()
       } else if (key === 'escape') {
@@ -245,6 +260,10 @@ export class Game {
     if (this.phase === 'briefing') return
     this.paused = paused
     if (!paused) this.helpOpen = false
+  }
+
+  toggleSpeed() {
+    this.speed = this.speed === 1 ? FAST_FORWARD : 1
   }
 
   /**
@@ -376,6 +395,9 @@ export class Game {
       return
     }
 
+    // Fast-forward scales simulation time; the pause and overlay paths above never see it.
+    dt *= this.speed
+
     this.elapsed += dt
 
     if (this.phase === 'break') {
@@ -392,7 +414,8 @@ export class Game {
 
     for (const lantern of this.lanterns) {
       lantern.animate(dt)
-      lantern.update(dt, this.walkers, this.lighting)
+      const hit = lantern.update(dt, this.walkers, this.lighting)
+      if (hit) this.sparks.burst(hit.x, hit.y)
     }
 
     for (const walker of this.walkers) {
@@ -417,6 +440,7 @@ export class Game {
         walker.gfx.destroy({ children: true })
       } else {
         this.oil += OIL_PER_LIT_KILL
+        this.sparks.wisp(walker.x, walker.y)
         this.corpses.push(new Corpse(walker.gfx))
       }
     }
@@ -433,6 +457,8 @@ export class Game {
       this.homesteadHp = 0
       this.phase = 'failed'
     } else if (this.phase === 'wave' && !this.spawnQueue.length && !this.walkers.length) {
+      // §9 income floor: clearing a wave pays regardless of how it was cleared.
+      this.oil += OIL_PER_WAVE
       this.waveIndex++
       if (this.waveIndex >= NIGHT_1_WAVES.length) {
         this.phase = 'complete'
@@ -461,10 +487,11 @@ export class Game {
     this.publish()
   }
 
-  /** Lightmap, bloom, motes, placement preview — the passes that run every frame. */
+  /** Lightmap, bloom, motes, sparks, placement preview — the passes that run every frame. */
   private renderPasses(dt: number) {
     this.lighting.update(this.app.renderer, dt)
     this.motes.update(dt, (x, y) => this.lighting.lightAt(x, y))
+    this.sparks.update(dt)
     this.bloom.update(this.app.renderer)
     this.drawPreview()
   }
@@ -485,6 +512,11 @@ export class Game {
       breakRemaining: Math.max(0, this.breakTimer),
       paused: this.paused,
       helpOpen: this.helpOpen,
+      speed: this.speed,
+      nextWaveCount:
+        this.phase === 'break' && this.waveIndex < NIGHT_1_WAVES.length
+          ? NIGHT_1_WAVES[this.waveIndex].count
+          : 0,
       lightUnderCursor: L,
       bandUnderCursor: bandOf(L),
       placementBlocker: this.placementBlocker(this.pointer.x, this.pointer.y),

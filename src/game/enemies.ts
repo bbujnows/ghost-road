@@ -144,8 +144,11 @@ export class RoadWalker {
 
     const dealt = amount * multiplier
     this.hp -= dealt
+    this.hitFlash = 0.09
     return dealt
   }
+
+  private hitFlash = 0
 
   /** Whether a ward may currently target it. Mirrors the damage gate. */
   targetable(lighting: LightingSystem): boolean {
@@ -189,6 +192,17 @@ export class RoadWalker {
     // Wounded things stoop.
     const wear = 1 - this.hp / ROAD_WALKER.hp
     this.frame.scale.y = 1 - wear * 0.12
+
+    // Hit feedback: a scorch flash and a flinch. Tint multiplies, so the flash pushes
+    // the blue-grey robe toward burnt amber rather than brightening it.
+    this.hitFlash = Math.max(0, this.hitFlash - dt)
+    if (this.hitFlash > 0) {
+      this.frame.tint = 0xffc9a0
+      this.frame.scale.x *= 1.05
+      this.frame.scale.y *= 0.96
+    } else {
+      this.frame.tint = 0xffffff
+    }
   }
 }
 

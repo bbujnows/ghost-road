@@ -130,9 +130,15 @@ kbd {
   color: #c6d6d2;
 }
 
-.help-btn {
-  pointer-events: auto;
+.top-buttons {
   margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.help-btn,
+.speed-btn {
+  pointer-events: auto;
   width: 34px;
   height: 34px;
   border-radius: 50%;
@@ -140,13 +146,24 @@ kbd {
   background: rgba(10, 18, 22, 0.62);
   backdrop-filter: blur(10px);
   color: #9fb0ad;
-  font-size: 15px;
+  font-size: 13px;
   cursor: pointer;
 }
 
-.help-btn:hover {
+.help-btn:hover,
+.speed-btn:hover {
   color: #ffc078;
   border-color: rgba(255, 192, 120, 0.4);
+}
+
+.speed-btn.active {
+  color: #ffc078;
+  border-color: rgba(255, 192, 120, 0.55);
+  background: rgba(255, 192, 120, 0.12);
+}
+
+.banner-detail {
+  color: #6c7a78;
 }
 
 .banner {

@@ -314,7 +314,12 @@ Only the Road Walker is specified so far; the rest get numbers as they are built
 
 | Enemy | HP | Speed | Porch damage |
 | --- | --- | --- | --- |
-| **Road Walker** | 120 | 30 px/s | 8 |
+| **Road Walker** | 190 *(interim)* | 30 px/s | 8 |
+
+> **190 is a feel-week interim** under flat-core falloff, verified by simulation: a walker dwells
+> ~7.7s in one lantern's lit chord (max ~196 damage), so 190 is a one-lantern kill with ~10%
+> margin. It gets retuned at build-order step 3 when lanterns stop dealing damage. The derivation
+> below reflects the *old* falloff and stands as history.
 
 The Road Walker's numbers are derived rather than picked. A lantern does `14 / 0.55 ≈ 25.5` dps,
 and a walker crossing a lantern's 154px Lit chord at 30 px/s is exposed for **5.1 seconds**, taking
