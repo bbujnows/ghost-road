@@ -46,7 +46,9 @@ export class RoadWalker {
   private draw() {
     const { color } = ROAD_WALKER
     const dark = 0x4d5c68
-    const H = 38
+    // Tall enough to read as a person standing over a dog — Kara is ~29px at the
+    // shoulder, so this keeps the scale relationship between them legible.
+    const H = 46
 
     this.shadow.ellipse(0, 2, 11, 4).fill({ color: 0x000000, alpha: 0.3 })
 
