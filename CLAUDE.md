@@ -4,7 +4,20 @@ An Appalachian folk-horror tower defense. Seven nights defending a homestead at 
 abandoned logging road. **Kara — a gold Labrador/pit mix with white paws, belly, and chest — is
 the centerpiece of the design, not a bonus unit.**
 
-## The two rules everything hangs off
+## Status: skeleton, awaiting the design doc
+
+This repo is a project skeleton. It mounts Pixi inside React, establishes the render layering,
+and demonstrates the lightmap. **There is no gameplay in it, deliberately.**
+
+No enemies, no wards, no waves, no economy, no bosses, no balance numbers. Those all come out of
+the design brief in [docs/design-prompt.md](docs/design-prompt.md), which has not been run yet.
+
+> **If you are picking this up: do not invent that content.** Run the design prompt first and
+> build against what it specifies. An earlier pass at this repo made up an enemy roster, ward
+> costs, damage numbers, and a night structure before the design existed, and all of it was
+> thrown away. Design first.
+
+## The two rules everything will hang off
 
 1. **Light gates damage.** Enemies are only damageable inside lit areas. Ward placement is a
    lighting puzzle, not a DPS problem. Anything that changes what is lit is a major ability.
@@ -13,12 +26,12 @@ the centerpiece of the design, not a bonus unit.**
 
 ## Kara
 
-Every one of her abilities comes from something the real dog actually does. Keep it that way —
-if a new mechanic does not trace back to a real trait, it does not belong to her.
+Every ability she gets must come from something the real dog actually does. If a proposed
+mechanic does not trace back to a real trait, it does not belong to her.
 
-| Real trait | Ability |
+| Real trait | Ability (specified, not yet built) |
 | --- | --- |
-| Silent except territorial at home | **The Bark** — she makes no sound all game; one bark means something reached the porch. Once per night, maximum. |
+| Silent except territorial at home | **The Bark** — silent all game; one bark means something reached the porch. Once per night, maximum. |
 | Floppy ears | **Ear-Perk** — hearing-cone detection, tells ~2s before a threat is visible |
 | Rolls on her back when playing | **Show Belly** — white belly up, reflected light burst; vulnerable while down |
 | Attacks water from a hose | **The Spring Line** — running-water ward (real folklore: spirits can't cross it); she amplifies it and is healed by it, but won't leave on her own |
@@ -37,35 +50,25 @@ permadeath mode.
 - Silent by default. The audio mix exists to make her one bark land.
 - 60fps in a Chrome tab, no install.
 
-## Architecture
+## What is actually in the repo
 
 ```
 src/game/
-  Game.ts       orchestrator — ticker, waves, input, HUD state bridge
+  Game.ts       Pixi mount, render layering, ticker, input plumbing. No gameplay.
   lighting.ts   the lightmap (RenderTexture + multiply overlay) and lightAt() queries
-  kara.ts       Kara: state machine, commands, rendering
-  enemies.ts    haint kinds, road pathing, light-gated damage
-  wards.ts      Lantern, SpringLine, Bubble
-  world.ts      background/road/homestead geometry
-  nights.ts     wave and night definitions (data only)
-src/ui/         React HUD overlay, pointer-events: none
+  kara.ts       Kara's appearance and walking. None of her abilities.
+  world.ts      throwaway placeholder scene so the lightmap has a surface
+src/ui/         placeholder React HUD overlay, pointer-events: none
 ```
 
 **Rendering layers, in order:** `scene` → `lighting.overlay` (multiply) → `foreground`.
 Anything that must stay visible in the dark goes in `foreground` — that is where Kara's white
-markings live, and why she reads as four pale paws moving through the black.
+markings live, and why she reads as four pale paws moving through the black. This is the one
+architectural decision already made, and it is the reason the skeleton is worth keeping.
 
-`LightingSystem.lightAt(x, y)` is a cheap analytic approximation of the rendered lightmap. Gameplay
-queries it; the shader never gets read back. If you change the gradient falloff, change both.
-
-## Status
-
-Playable skeleton. Real: the lightmap, light-gated damage, Kara's commands, running water,
-wave spawning. **Not yet:** hand-painted art (all geometry is flat vector stand-in), audio,
-the toy loadout, the ball-stash economy between nights, bond unlocks (Hold / Lead), nights 4-7,
-and the folklore bosses.
-
-The full design brief is in [docs/design-prompt.md](docs/design-prompt.md).
+`LightingSystem.lightAt(x, y)` is a cheap analytic approximation of the rendered lightmap.
+Gameplay queries it; the shader is never read back. If you change the gradient falloff in
+`radialGradient()`, change `lightAt()` to match or they will disagree.
 
 ## Commands
 
@@ -78,7 +81,10 @@ npm run lint     # oxlint
 Node is installed per-user via winget; if `npm` is blocked in PowerShell, run it through
 `cmd /c "set PATH=%PATH%;<node-dir>&& npm ..."`.
 
-## Controls
+If a fresh `npm install` produces `lightningcss ... is not a valid Win32 application`, the
+native binary downloaded corrupt. Fix with `npm install lightningcss-win32-x64-msvc --no-save`.
 
-`1`/`2` select ward · left click place · right click send Kara · `B` bubbles · `X` show belly ·
-`Z` blanket · `Space` pause
+## Gotchas
+
+- `erasableSyntaxOnly` is on in the TS config, so **constructor parameter properties do not
+  compile**. Declare fields explicitly and assign in the constructor.

@@ -3,9 +3,17 @@
 An Appalachian folk-horror tower defense. Seven nights defending a homestead at the end of an
 abandoned logging road, with a dog named Kara.
 
-Enemies are only damageable inside lit areas, so placing lanterns is a lighting puzzle rather
-than a DPS problem. Kara is the exception — she works in the dark, which is the entire reason
-she matters.
+## Status
+
+**Skeleton. There is no game here yet.**
+
+What exists is the stack wired up and running: Pixi mounted inside React, the render layering
+established, and a working lightmap you can walk Kara around in. Click to move her, Space to
+pause.
+
+The design brief lives in [docs/design-prompt.md](docs/design-prompt.md) and has not been run
+yet. Enemies, wards, waves, the economy, the bosses, and all balance come out of that document —
+not out of the code. See [CLAUDE.md](CLAUDE.md) before adding anything.
 
 ## Run it
 
@@ -14,25 +22,11 @@ npm install
 npm run dev
 ```
 
-## Controls
+## Why the layering matters
 
-| Input | Action |
-| --- | --- |
-| `1` / `2` | Select ward (Lantern Post / Spring Line) |
-| Left click | Place selected ward |
-| Right click | Send Kara |
-| `B` | Bubbles — she chases instantly |
-| `X` | Show Belly — white belly up, light burst, vulnerable while down |
-| `Z` | Blanket — hidden and untargetable |
-| `Space` | Pause |
+Kara is a gold Lab/pit mix with white paws, belly, and chest. Her body renders under the
+darkness overlay and goes dark with everything else; her white markings render above it. Walk
+her off the lit road and she becomes four pale paws and a chest moving through the black.
 
-Watch her ears, not the road. She lifts them about two seconds before anything becomes visible.
-She is silent all game — if she barks, something has already reached the porch.
-
-## Status
-
-Playable skeleton. The lightmap, light-gated damage, Kara's command set, running water, and wave
-spawning are real. Art is flat vector stand-in geometry, and there is no audio yet.
-
-See [CLAUDE.md](CLAUDE.md) for architecture and [docs/design-prompt.md](docs/design-prompt.md)
-for the full design brief.
+That effect is the reason the render layering is `scene → lightmap (multiply) → foreground`, and
+it is the one design-driven decision already baked into the skeleton.

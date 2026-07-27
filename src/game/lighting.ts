@@ -2,12 +2,15 @@ import { Container, Graphics, RenderTexture, Sprite, Texture } from 'pixi.js'
 import type { Renderer } from 'pixi.js'
 
 /**
- * Light is the core mechanic. Enemies are only damageable inside lit areas, so
- * ward placement is really a lighting puzzle.
+ * The lightmap.
  *
- * Technique: render a lightmap (dark ambient base + additive radial gradients)
- * into a RenderTexture, then draw it over the scene with a multiply blend.
- * Unlit areas collapse toward the ambient color; lit areas keep their paint.
+ * Technique: render a dark ambient base plus additive radial gradients into a
+ * RenderTexture, then draw that over the scene with a multiply blend. Unlit areas
+ * collapse toward the ambient color; lit areas keep their paint.
+ *
+ * The design calls for light to gate damage — enemies damageable only inside lit
+ * areas — which is what `lightAt()` is for. The threshold that counts as "lit", and
+ * everything that depends on it, is a design decision and is not made here.
  */
 export interface Light {
   x: number
@@ -99,11 +102,6 @@ export class LightingSystem {
       if (d < l.radius) total += l.intensity * (1 - d / l.radius)
     }
     return Math.min(1, total)
-  }
-
-  /** True if a point is lit enough for the wards to hurt what is standing there. */
-  isLit(x: number, y: number): boolean {
-    return this.lightAt(x, y) > 0.15
   }
 
   update(renderer: Renderer, dt: number) {
