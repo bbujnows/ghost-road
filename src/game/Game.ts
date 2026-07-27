@@ -19,7 +19,7 @@ import { HOMESTEAD, buildScene } from './world'
 export const WORLD_WIDTH = 1280
 export const WORLD_HEIGHT = 720
 
-export type Phase = 'wave' | 'break' | 'failed' | 'complete'
+export type Phase = 'briefing' | 'wave' | 'break' | 'failed' | 'complete'
 
 export interface GameState {
   phase: Phase
@@ -33,10 +33,15 @@ export interface GameState {
   /** Seconds until the next wave, during a break. */
   breakRemaining: number
   paused: boolean
+  helpOpen: boolean
   lightUnderCursor: number
   bandUnderCursor: Band
   /** Null when a lantern can be placed under the cursor. */
   placementBlocker: string | null
+  lanternCost: number
+  /** Radii the player actually gets, which are not the lantern's nominal radius. */
+  litRadius: number
+  dimRadius: number
 }
 
 /**
@@ -61,7 +66,8 @@ export class Game {
   private lanterns: Lantern[] = []
   private preview = new Graphics()
 
-  private phase: Phase = 'break'
+  // Starts on the briefing so the player has time to read before anything walks.
+  private phase: Phase = 'briefing'
   private waveIndex = 0
   private spawnQueue: number[] = []
   private elapsed = 0
@@ -69,6 +75,7 @@ export class Game {
   private homesteadHp = HOMESTEAD_MAX_HP
   private oil = NIGHT_1_STARTING_OIL
   private paused = false
+  private helpOpen = false
 
   private pointer = { x: WORLD_WIDTH / 2, y: WORLD_HEIGHT / 2 }
   private stateHandler: ((s: GameState) => void) | null = null
@@ -158,9 +165,22 @@ export class Game {
     const onContext = (e: Event) => e.preventDefault()
     const onKey = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase()
+
+      if (this.phase === 'briefing') {
+        if (key === ' ' || key === 'enter') {
+          e.preventDefault()
+          this.beginNight()
+        }
+        return
+      }
+
       if (key === ' ') {
         e.preventDefault()
         this.paused = !this.paused
+      } else if (key === '?' || key === '/' || key === 'h') {
+        this.toggleHelp()
+      } else if (key === 'escape' && this.helpOpen) {
+        this.toggleHelp()
       } else if (key === 'r' && this.phase === 'failed') {
         this.retryNight()
       }
@@ -185,8 +205,23 @@ export class Game {
     )
   }
 
+  /** Leaves the briefing and starts the first wave countdown. */
+  beginNight() {
+    if (this.phase !== 'briefing') return
+    this.phase = 'break'
+    this.breakTimer = 4
+  }
+
+  /** Help is a pause — it is fine to read it mid-wave. */
+  toggleHelp() {
+    if (this.phase === 'briefing') return
+    this.helpOpen = !this.helpOpen
+    this.paused = this.helpOpen
+  }
+
   /** Why a lantern cannot go here, or null if it can. */
   private placementBlocker(x: number, y: number): string | null {
+    if (this.phase === 'briefing') return 'read the briefing first'
     if (this.phase === 'failed' || this.phase === 'complete') return 'not now'
     if (this.oil < LANTERN.cost) return 'not enough oil'
     // Overlapping pools is the point (§2.1 bright band); stacking them is degenerate.
@@ -207,7 +242,8 @@ export class Game {
     this.preview.clear()
 
     const { x, y } = this.pointer
-    if (this.phase === 'failed' || this.phase === 'complete' || this.paused) return
+    if (this.phase === 'briefing' || this.phase === 'failed' || this.phase === 'complete') return
+    if (this.paused) return
 
     const blocked = this.placementBlocker(x, y) !== null
     const litR = radiusForThreshold(LANTERN, BAND_LIT)
@@ -265,7 +301,13 @@ export class Game {
   }
 
   private tick(dt: number) {
-    if (this.paused || this.phase === 'failed' || this.phase === 'complete') {
+    const frozen =
+      this.paused ||
+      this.phase === 'briefing' ||
+      this.phase === 'failed' ||
+      this.phase === 'complete'
+
+    if (frozen) {
       this.lighting.update(this.app.renderer, dt)
       this.drawPreview()
       this.publish()
@@ -343,9 +385,13 @@ export class Game {
       walkersAlive: this.walkers.length,
       breakRemaining: Math.max(0, this.breakTimer),
       paused: this.paused,
+      helpOpen: this.helpOpen,
       lightUnderCursor: L,
       bandUnderCursor: bandOf(L),
       placementBlocker: this.placementBlocker(this.pointer.x, this.pointer.y),
+      lanternCost: LANTERN.cost,
+      litRadius: radiusForThreshold(LANTERN, BAND_LIT),
+      dimRadius: radiusForThreshold(LANTERN, BAND_DIM),
     })
   }
 
