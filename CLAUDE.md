@@ -4,18 +4,21 @@ An Appalachian folk-horror tower defense. Seven nights defending a homestead at 
 abandoned logging road. **Kara — a gold Labrador/pit mix with white paws, belly, and chest — is
 the centerpiece of the design, not a bonus unit.**
 
-## Status: skeleton, awaiting the design doc
+## Status: skeleton, design doc complete
 
-This repo is a project skeleton. It mounts Pixi inside React, establishes the render layering,
-and demonstrates the lightmap. **There is no gameplay in it, deliberately.**
+The code is still a skeleton — it mounts Pixi inside React, establishes the render layering, and
+demonstrates the lightmap. **There is no gameplay in it yet.**
 
-No enemies, no wards, no waves, no economy, no bosses, no balance numbers. Those all come out of
-the design brief in [docs/design-prompt.md](docs/design-prompt.md), which has not been run yet.
+**[docs/design-doc.md](docs/design-doc.md) is the source of truth for everything else** — the
+light bands, Kara's commands and cooldowns, the toy list, the wards, the seven nights and their
+bosses, the stash economy, and the audio design. It has numbers. Build against them and change
+them by editing that document, not by inventing alternatives in code.
 
-> **If you are picking this up: do not invent that content.** Run the design prompt first and
-> build against what it specifies. An earlier pass at this repo made up an enemy roster, ward
-> costs, damage numbers, and a night structure before the design existed, and all of it was
-> thrown away. Design first.
+> An earlier pass at this repo made up an enemy roster, ward costs, damage numbers, and a night
+> structure *before* the design existed, and all of it was thrown away. If something is not in
+> the design doc, it has not been decided — ask rather than invent.
+
+The build order is in §11 of the design doc. Next step is a lantern and a Road Walker.
 
 ## The two rules everything will hang off
 

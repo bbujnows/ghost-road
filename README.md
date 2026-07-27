@@ -11,9 +11,12 @@ What exists is the stack wired up and running: Pixi mounted inside React, the re
 established, and a working lightmap you can walk Kara around in. Click to move her, Space to
 pause.
 
-The design brief lives in [docs/design-prompt.md](docs/design-prompt.md) and has not been run
-yet. Enemies, wards, waves, the economy, the bosses, and all balance come out of that document —
-not out of the code. See [CLAUDE.md](CLAUDE.md) before adding anything.
+The design is done and lives in **[docs/design-doc.md](docs/design-doc.md)** — light bands,
+Kara's full command set, the toy loadout, the wards and their synergies, seven nights of bosses,
+the stash economy, and the audio design. The brief it came from is
+[docs/design-prompt.md](docs/design-prompt.md).
+
+Build order is §11 of the design doc. See [CLAUDE.md](CLAUDE.md) before adding anything.
 
 ## Run it
 
