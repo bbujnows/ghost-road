@@ -103,6 +103,16 @@ Node is installed per-user via winget; if `npm` is blocked in PowerShell, run it
 If a fresh `npm install` produces `lightningcss ... is not a valid Win32 application`, the
 native binary downloaded corrupt. Fix with `npm install lightningcss-win32-x64-msvc --no-save`.
 
+## UI rules
+
+- **Every overlay that stops play must carry a visible button out.** The tab auto-pauses on blur,
+  so the player can land on an overlay without having pressed anything — "press Space" is a
+  shortcut for people who already know it, never the exit. Use the `Curtain` component in
+  `src/ui/Hud.tsx`, which enforces title + action button + optional keyboard hint.
+- **Escape always means "get me out of this overlay."**
+- **While the board is frozen, clicks must not reach it.** `Game.inputLocked` gates pointer input;
+  without it you can spend oil on a paused game.
+
 ## Gotchas
 
 - `erasableSyntaxOnly` is on in the TS config, so **constructor parameter properties do not

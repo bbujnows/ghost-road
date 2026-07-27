@@ -20,6 +20,40 @@ export interface HudProps {
   state: GameState | null
   onBegin: () => void
   onToggleHelp: () => void
+  onResume: () => void
+  onRestart: () => void
+}
+
+/**
+ * Every overlay in this game must have a visible way out. The tab can auto-pause
+ * without the player having pressed anything, so "press Space" is not an exit — it is
+ * a shortcut for people who already know it.
+ */
+function Curtain({
+  title,
+  sub,
+  action,
+  hint,
+  onAction,
+}: {
+  title: string
+  sub?: string
+  action: string
+  hint?: string
+  onAction: () => void
+}) {
+  return (
+    <div className="veil">
+      <div className="curtain">
+        <p className="curtain-title">{title}</p>
+        {sub && <p className="veil-sub">{sub}</p>}
+        <button type="button" className="primary" onClick={onAction}>
+          {action}
+        </button>
+        {hint && <p className="footnote">{hint}</p>}
+      </div>
+    </div>
+  )
 }
 
 function Rules({ state }: { state: GameState }) {
@@ -56,7 +90,7 @@ function Rules({ state }: { state: GameState }) {
   )
 }
 
-export function Hud({ state, onBegin, onToggleHelp }: HudProps) {
+export function Hud({ state, onBegin, onToggleHelp, onResume, onRestart }: HudProps) {
   if (!state) return null
 
   const hpPct = (state.homesteadHp / state.homesteadMaxHp) * 100
@@ -168,24 +202,34 @@ export function Hud({ state, onBegin, onToggleHelp }: HudProps) {
         </div>
       )}
 
-      {state.paused && !state.helpOpen && <div className="veil">Paused</div>}
+      {state.paused && !state.helpOpen && state.phase !== 'failed' && state.phase !== 'complete' && (
+        <Curtain
+          title="Paused"
+          sub="The road waits."
+          action="Resume"
+          hint="or press Space"
+          onAction={onResume}
+        />
+      )}
 
       {state.phase === 'failed' && (
-        <div className="veil">
-          <div className="veil-body">
-            <p>The hollow took the homestead.</p>
-            <p className="veil-sub">Press R to hold the night again.</p>
-          </div>
-        </div>
+        <Curtain
+          title="The hollow took the homestead."
+          sub="Kara is fine. She always is."
+          action="Hold the night again"
+          hint="or press R"
+          onAction={onRestart}
+        />
       )}
 
       {state.phase === 'complete' && (
-        <div className="veil">
-          <div className="veil-body">
-            <p>Dawn.</p>
-            <p className="veil-sub">She stayed on the porch all night.</p>
-          </div>
-        </div>
+        <Curtain
+          title="Dawn."
+          sub="She stayed on the porch all night."
+          action="Hold it again"
+          hint="or press R"
+          onAction={onRestart}
+        />
       )}
     </div>
   )

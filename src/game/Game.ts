@@ -158,6 +158,7 @@ export class Game {
       this.pointer = toWorld(e)
     }
     const onDown = (e: MouseEvent) => {
+      if (this.inputLocked) return
       const p = toWorld(e)
       if (e.button === 2) this.kara.moveTo(p.x, p.y)
       else this.placeLantern(p.x, p.y)
@@ -176,13 +177,14 @@ export class Game {
 
       if (key === ' ') {
         e.preventDefault()
-        this.paused = !this.paused
+        this.setPaused(!this.paused)
       } else if (key === '?' || key === '/' || key === 'h') {
         this.toggleHelp()
-      } else if (key === 'escape' && this.helpOpen) {
-        this.toggleHelp()
-      } else if (key === 'r' && this.phase === 'failed') {
-        this.retryNight()
+      } else if (key === 'escape') {
+        // Escape always means "get me out of this overlay".
+        if (this.helpOpen || this.paused) this.resume()
+      } else if (key === 'r' && (this.phase === 'failed' || this.phase === 'complete')) {
+        this.restart()
       }
     }
     // §11: pause the instant the tab loses focus. It is a game played at a desk.
@@ -219,9 +221,35 @@ export class Game {
     this.paused = this.helpOpen
   }
 
+  setPaused(paused: boolean) {
+    if (this.phase === 'briefing') return
+    this.paused = paused
+    if (!paused) this.helpOpen = false
+  }
+
+  /**
+   * Every overlay needs a way out that does not require knowing a keybind — the tab
+   * can auto-pause the game without the player ever having pressed anything.
+   */
+  resume() {
+    this.setPaused(false)
+  }
+
+  /** Reachable from both a loss and a finished night. */
+  restart() {
+    this.retryNight()
+  }
+
+  /** True while the board is frozen and clicks must not reach it. */
+  private get inputLocked() {
+    return this.paused || this.helpOpen || this.phase === 'briefing'
+  }
+
   /** Why a lantern cannot go here, or null if it can. */
   private placementBlocker(x: number, y: number): string | null {
     if (this.phase === 'briefing') return 'read the briefing first'
+    // Without this you can spend oil on a frozen board.
+    if (this.paused || this.helpOpen) return 'paused'
     if (this.phase === 'failed' || this.phase === 'complete') return 'not now'
     if (this.oil < LANTERN.cost) return 'not enough oil'
     // Overlapping pools is the point (§2.1 bright band); stacking them is degenerate.
@@ -298,6 +326,8 @@ export class Game {
     this.spawnQueue = []
     this.breakTimer = 4
     this.phase = 'break'
+    this.paused = false
+    this.helpOpen = false
   }
 
   private tick(dt: number) {

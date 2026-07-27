@@ -32,12 +32,20 @@ export default function App() {
 
   const begin = useCallback(() => gameRef.current?.beginNight(), [])
   const toggleHelp = useCallback(() => gameRef.current?.toggleHelp(), [])
+  const resume = useCallback(() => gameRef.current?.resume(), [])
+  const restart = useCallback(() => gameRef.current?.restart(), [])
 
   return (
     <div className="app">
       <div className="stage">
         <div className="canvas-host" ref={hostRef} />
-        <Hud state={state} onBegin={begin} onToggleHelp={toggleHelp} />
+        <Hud
+          state={state}
+          onBegin={begin}
+          onToggleHelp={toggleHelp}
+          onResume={resume}
+          onRestart={restart}
+        />
       </div>
     </div>
   )

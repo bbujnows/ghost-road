@@ -173,18 +173,32 @@ kbd {
   padding: 24px;
 }
 
-.veil-body {
-  text-align: center;
-}
-
-.veil-body p {
-  margin: 0 0 10px;
-}
-
 .veil-sub {
   font-size: 14px;
   letter-spacing: 0.06em;
   color: #8fa9b8;
+}
+
+/* Any overlay that stops play. Always carries a visible button out. */
+.curtain {
+  pointer-events: auto;
+  text-align: center;
+  min-width: 300px;
+  max-width: 440px;
+}
+
+.curtain-title {
+  margin: 0 0 8px;
+  font-size: 22px;
+  color: #eae7de;
+}
+
+.curtain .veil-sub {
+  margin: 0 0 22px;
+}
+
+.curtain .primary {
+  letter-spacing: 0.06em;
 }
 
 /* ── The briefing / help sheet ───────────────────────────────────────────── */
