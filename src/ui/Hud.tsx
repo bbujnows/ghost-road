@@ -9,7 +9,8 @@ const BAND_LABEL = {
 } as const
 
 const CONTROLS = [
-  { key: 'Left click', label: 'Place a lantern' },
+  { key: '1 / 2', label: 'Select ward' },
+  { key: 'Left click', label: 'Place it' },
   { key: 'Right click', label: 'Send Kara' },
   { key: 'F', label: 'Fast-forward' },
   { key: 'Space', label: 'Pause' },
@@ -23,6 +24,7 @@ export interface HudProps {
   onResume: () => void
   onRestart: () => void
   onToggleSpeed: () => void
+  onSelectWard: (id: 'lantern' | 'iron') => void
 }
 
 /**
@@ -66,13 +68,15 @@ function Rules({ state }: { state: GameState }) {
       </li>
       <li>
         <strong>The dark protects them.</strong> Out in the unlit road they are invisible and
-        cannot be hurt at all. Light is not scenery here — it is the weapon.
+        cannot be hurt at all. Light is not scenery here — it is what makes ground fightable.
       </li>
       <li>
-        <strong>A lantern costs {state.lanternCost} oil.</strong> The{' '}
-        <span className="ring-lit">inner ring</span> is where it can kill, the{' '}
-        <span className="ring-dim">outer ring</span> is where you can merely see. Aim the inner
-        ring at the road.
+        <strong>Lanterns don't kill. Iron does.</strong> A lantern ({state.lanternCost} oil)
+        lights a stretch of road — the <span className="ring-lit">inner ring</span> is where its
+        light is strong enough to fight in. A board of{' '}
+        <span className="ring-iron">cold iron nails</span> ({state.ironCost} oil) lies along the
+        road bed and burns whatever walks it — <em>but only in light</em>. You need both, and
+        where they overlap is where the road bites.
       </li>
       <li>
         <strong>Every wave you survive pays {OIL_PER_WAVE} oil</strong>, and each kill in the
@@ -87,7 +91,15 @@ function Rules({ state }: { state: GameState }) {
   )
 }
 
-export function Hud({ state, onBegin, onToggleHelp, onResume, onRestart, onToggleSpeed }: HudProps) {
+export function Hud({
+  state,
+  onBegin,
+  onToggleHelp,
+  onResume,
+  onRestart,
+  onToggleSpeed,
+  onSelectWard,
+}: HudProps) {
   if (!state) return null
 
   const hpPct = (state.homesteadHp / state.homesteadMaxHp) * 100
@@ -112,11 +124,11 @@ export function Hud({ state, onBegin, onToggleHelp, onResume, onRestart, onToggl
 
         <div className="panel">
           <span className="label">Lamp oil</span>
-          <span className={`value oil ${state.canAffordLantern ? '' : 'short'}`}>{state.oil}</span>
+          <span className={`value oil ${state.canAffordSelected ? '' : 'short'}`}>{state.oil}</span>
           <span className="sub">
-            {state.canAffordLantern
-              ? `${Math.floor(state.oil / state.lanternCost)} lantern(s)`
-              : `need ${state.lanternCost}`}
+            {state.canAffordSelected
+              ? 'enough for the selected ward'
+              : `selected ward needs ${state.selectedWard === 'lantern' ? state.lanternCost : state.ironCost}`}
           </span>
         </div>
 
@@ -142,8 +154,25 @@ export function Hud({ state, onBegin, onToggleHelp, onResume, onRestart, onToggl
       </div>
 
       <div className="hud-bottom">
-        <div className="panel">
-          <span className="label">Lantern Post · {state.lanternCost} oil</span>
+        <div className="panel wards">
+          <div
+            className={`ward ${state.selectedWard === 'lantern' ? 'selected' : ''}`}
+            onClick={() => onSelectWard('lantern')}
+          >
+            <kbd>1</kbd>
+            <span className="ward-name">Lantern Post</span>
+            <span className="ward-role">light</span>
+            <span className="ward-cost">{state.lanternCost}</span>
+          </div>
+          <div
+            className={`ward ${state.selectedWard === 'iron' ? 'selected' : ''}`}
+            onClick={() => onSelectWard('iron')}
+          >
+            <kbd>2</kbd>
+            <span className="ward-name">Cold Iron</span>
+            <span className="ward-role">damage, in light</span>
+            <span className="ward-cost">{state.ironCost}</span>
+          </div>
           <span className="hint">
             {state.placementBlocker ? (
               <span className="blocked">{state.placementBlocker}</span>

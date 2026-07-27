@@ -2,6 +2,7 @@ import { Application, Container, Graphics } from 'pixi.js'
 import {
   BAND_DIM,
   BAND_LIT,
+  COLD_IRON,
   EAR_PERK_LEAD,
   FAST_FORWARD,
   HOMESTEAD_MAX_HP,
@@ -18,14 +19,15 @@ import { Kara } from './kara'
 import type { Threat } from './kara'
 import { LightingSystem, bandOf, radiusForThreshold } from './lighting'
 import type { Band } from './lighting'
-import { Lantern } from './wards'
-import { HOMESTEAD, buildScene } from './world'
+import { ColdIron, Lantern } from './wards'
+import { HOMESTEAD, ROAD, buildScene } from './world'
 import type { Smoke } from './world'
 
 export const WORLD_WIDTH = 1280
 export const WORLD_HEIGHT = 720
 
 export type Phase = 'briefing' | 'wave' | 'break' | 'failed' | 'complete'
+export type WardId = 'lantern' | 'iron'
 
 export interface GameState {
   phase: Phase
@@ -34,7 +36,8 @@ export interface GameState {
   homesteadHp: number
   homesteadMaxHp: number
   oil: number
-  canAffordLantern: boolean
+  selectedWard: WardId
+  canAffordSelected: boolean
   walkersAlive: number
   /** Seconds until the next wave, during a break. */
   breakRemaining: number
@@ -46,9 +49,10 @@ export interface GameState {
   nextWaveCount: number
   lightUnderCursor: number
   bandUnderCursor: Band
-  /** Null when a lantern can be placed under the cursor. */
+  /** Null when the selected ward can be placed under the cursor. */
   placementBlocker: string | null
   lanternCost: number
+  ironCost: number
   /** Radii the player actually gets, which are not the lantern's nominal radius. */
   litRadius: number
   dimRadius: number
@@ -78,6 +82,8 @@ export class Game {
   private walkers: RoadWalker[] = []
   private corpses: Corpse[] = []
   private lanterns: Lantern[] = []
+  private irons: ColdIron[] = []
+  private selectedWard: WardId = 'lantern'
   private preview = new Graphics()
 
   // Starts on the briefing so the player has time to read before anything walks.
@@ -194,7 +200,7 @@ export class Game {
       if (this.inputLocked) return
       const p = toWorld(e)
       if (e.button === 2) this.kara.moveTo(p.x, p.y)
-      else this.placeLantern(p.x, p.y)
+      else this.placeWard(p.x, p.y)
     }
     const onContext = (e: Event) => e.preventDefault()
     const onKey = (e: KeyboardEvent) => {
@@ -211,6 +217,10 @@ export class Game {
       if (key === ' ') {
         e.preventDefault()
         this.setPaused(!this.paused)
+      } else if (key === '1') {
+        this.selectedWard = 'lantern'
+      } else if (key === '2') {
+        this.selectedWard = 'iron'
       } else if (key === 'f') {
         this.toggleSpeed()
       } else if (key === '?' || key === '/' || key === 'h') {
@@ -284,26 +294,62 @@ export class Game {
     return this.paused || this.helpOpen || this.phase === 'briefing'
   }
 
-  /** Why a lantern cannot go here, or null if it can. */
+  selectWard(id: WardId) {
+    this.selectedWard = id
+  }
+
+  /** The angle of the road segment nearest a point — iron lies along the road bed. */
+  private roadAngleAt(x: number, y: number): number {
+    let best = Infinity
+    let angle = 0
+    for (let i = 0; i < ROAD.length - 1; i++) {
+      const a = ROAD[i]
+      const b = ROAD[i + 1]
+      const abx = b.x - a.x
+      const aby = b.y - a.y
+      const len2 = abx * abx + aby * aby || 1
+      const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (y - a.y) * aby) / len2))
+      const px = a.x + abx * t
+      const py = a.y + aby * t
+      const d = Math.hypot(x - px, y - py)
+      if (d < best) {
+        best = d
+        angle = Math.atan2(aby, abx)
+      }
+    }
+    return angle
+  }
+
+  private wardCost(id: WardId): number {
+    return id === 'lantern' ? LANTERN.cost : COLD_IRON.cost
+  }
+
+  /** Why the selected ward cannot go here, or null if it can. */
   private placementBlocker(x: number, y: number): string | null {
     if (this.phase === 'briefing') return 'read the briefing first'
     // Without this you can spend oil on a frozen board.
     if (this.paused || this.helpOpen) return 'paused'
     if (this.phase === 'failed' || this.phase === 'complete') return 'not now'
-    if (this.oil < LANTERN.cost) return 'not enough oil'
-    // Overlapping pools is the point (§2.1 bright band); stacking them is degenerate.
-    for (const l of this.lanterns) {
-      if (Math.hypot(l.x - x, l.y - y) < LANTERN.minSpacing) return 'too close to another lantern'
-    }
+    if (this.oil < this.wardCost(this.selectedWard)) return 'not enough oil'
     if (Math.hypot(x - HOMESTEAD.x, y - HOMESTEAD.y) < 70) return 'too close to the homestead'
+
+    if (this.selectedWard === 'lantern') {
+      // Overlapping pools is the point; exact stacking is degenerate.
+      for (const l of this.lanterns) {
+        if (Math.hypot(l.x - x, l.y - y) < LANTERN.minSpacing) return 'too close to another lantern'
+      }
+    } else {
+      for (const s of this.irons) {
+        if (Math.hypot(s.x - x, s.y - y) < COLD_IRON.minSpacing) return 'too close to other iron'
+      }
+    }
     return null
   }
 
   /**
-   * Draws what the player is actually buying: the inner ring is the damageable zone,
-   * the outer is the edge of visibility. Neither is the lantern's nominal radius, and
-   * the gap between them is the thing that has to be taught in the first thirty
-   * seconds of Night 1.
+   * Draws what the player is actually buying. For a lantern: the inner ring is the
+   * damageable zone, the outer the edge of visibility. For iron: the strip itself,
+   * already snapped to the road's direction.
    */
   private drawPreview() {
     this.preview.clear()
@@ -313,27 +359,59 @@ export class Game {
     if (this.paused) return
 
     const blocked = this.placementBlocker(x, y) !== null
-    const litR = radiusForThreshold(LANTERN, BAND_LIT)
-    const dimR = radiusForThreshold(LANTERN, BAND_DIM)
-    const color = blocked ? 0xff8f6b : 0xffc078
 
-    this.preview
-      .circle(x, y, dimR)
-      .stroke({ width: 1, color, alpha: blocked ? 0.25 : 0.28 })
-      .circle(x, y, litR)
-      .stroke({ width: 1.5, color, alpha: blocked ? 0.35 : 0.6 })
-      .circle(x, y, litR)
-      .fill({ color, alpha: blocked ? 0.03 : 0.06 })
+    if (this.selectedWard === 'lantern') {
+      const litR = radiusForThreshold(LANTERN, BAND_LIT)
+      const dimR = radiusForThreshold(LANTERN, BAND_DIM)
+      const color = blocked ? 0xff8f6b : 0xffc078
+
+      this.preview
+        .circle(x, y, dimR)
+        .stroke({ width: 1, color, alpha: blocked ? 0.25 : 0.28 })
+        .circle(x, y, litR)
+        .stroke({ width: 1.5, color, alpha: blocked ? 0.35 : 0.6 })
+        .circle(x, y, litR)
+        .fill({ color, alpha: blocked ? 0.03 : 0.06 })
+    } else {
+      const color = blocked ? 0xff8f6b : 0x9fb8cf
+      const angle = this.roadAngleAt(x, y)
+      const cos = Math.cos(angle)
+      const sin = Math.sin(angle)
+      const hl = COLD_IRON.length / 2
+      const hw = COLD_IRON.width / 2
+      const corners: [number, number][] = [
+        [-hl, -hw],
+        [hl, -hw],
+        [hl, hw],
+        [-hl, hw],
+      ]
+      const pts = corners.map(([cx, cy]) => ({
+        x: x + cx * cos - cy * sin,
+        y: y + cx * sin + cy * cos,
+      }))
+      this.preview
+        .poly(pts)
+        .stroke({ width: 1.5, color, alpha: blocked ? 0.35 : 0.7 })
+        .poly(pts)
+        .fill({ color, alpha: blocked ? 0.04 : 0.1 })
+    }
   }
 
-  private placeLantern(x: number, y: number) {
+  private placeWard(x: number, y: number) {
     if (this.placementBlocker(x, y) !== null) return
 
-    this.oil -= LANTERN.cost
-    const lantern = new Lantern(x, y, this.lighting)
-    this.lanterns.push(lantern)
-    this.scene.addChild(lantern.gfx)
-    this.bloom.source.addChild(lantern.emissive)
+    this.oil -= this.wardCost(this.selectedWard)
+
+    if (this.selectedWard === 'lantern') {
+      const lantern = new Lantern(x, y, this.lighting)
+      this.lanterns.push(lantern)
+      this.scene.addChild(lantern.gfx)
+      this.bloom.source.addChild(lantern.emissive)
+    } else {
+      const iron = new ColdIron(x, y, this.roadAngleAt(x, y))
+      this.irons.push(iron)
+      this.scene.addChild(iron.gfx)
+    }
   }
 
   private queueWave(index: number) {
@@ -367,6 +445,12 @@ export class Game {
       l.emissive.destroy({ children: true })
     }
     this.lanterns = []
+
+    for (const s of this.irons) {
+      this.scene.removeChild(s.gfx)
+      s.gfx.destroy({ children: true })
+    }
+    this.irons = []
 
     this.homesteadHp = HOMESTEAD_MAX_HP
     this.oil = NIGHT_1_STARTING_OIL
@@ -412,10 +496,13 @@ export class Game {
       this.scene.addChild(walker.gfx)
     }
 
-    for (const lantern of this.lanterns) {
-      lantern.animate(dt)
-      const hit = lantern.update(dt, this.walkers, this.lighting)
-      if (hit) this.sparks.burst(hit.x, hit.y)
+    for (const lantern of this.lanterns) lantern.animate(dt)
+
+    // The iron does the killing now — but only where the lanterns have made it possible.
+    for (const iron of this.irons) {
+      for (const hit of iron.update(dt, this.walkers, this.lighting)) {
+        this.sparks.burst(hit.x, hit.y)
+      }
     }
 
     for (const walker of this.walkers) {
@@ -507,7 +594,8 @@ export class Game {
       homesteadHp: Math.max(0, this.homesteadHp),
       homesteadMaxHp: HOMESTEAD_MAX_HP,
       oil: Math.floor(this.oil),
-      canAffordLantern: this.oil >= LANTERN.cost,
+      selectedWard: this.selectedWard,
+      canAffordSelected: this.oil >= this.wardCost(this.selectedWard),
       walkersAlive: this.walkers.length,
       breakRemaining: Math.max(0, this.breakTimer),
       paused: this.paused,
@@ -521,6 +609,7 @@ export class Game {
       bandUnderCursor: bandOf(L),
       placementBlocker: this.placementBlocker(this.pointer.x, this.pointer.y),
       lanternCost: LANTERN.cost,
+      ironCost: COLD_IRON.cost,
       litRadius: radiusForThreshold(LANTERN, BAND_LIT),
       dimRadius: radiusForThreshold(LANTERN, BAND_DIM),
     })

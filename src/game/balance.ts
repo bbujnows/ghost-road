@@ -29,21 +29,36 @@ export const FOG_PENALTY = 0.5
 
 // ─── §5 Wards: Lantern Post ─────────────────────────────────────────────────
 
+/**
+ * Roster split (build-order step 3, consult §4): the lantern is PURE LIGHT and deals
+ * no damage. It makes ground fightable; something else has to do the fighting. This
+ * is the change that makes "reveal" and "kill" two separate purchases.
+ */
 export const LANTERN = {
-  cost: 30,
+  cost: 15,
   intensity: 0.85,
-  radius: 150,
-  damage: 14,
-  fireInterval: 0.55,
+  radius: 120,
   color: 0xffc078,
   flicker: 0.06,
-  /**
-   * A lantern cannot fire the instant something becomes damageable. Without this,
-   * two overlapping lanterns land 35 damage in a single frame the moment a walker
-   * crosses into the light — 58% of its health before the player sees it happen.
-   */
-  initialDelay: 0.3,
   /** Not from the doc: overlap is the point, exact stacking is degenerate. */
+  minSpacing: 50,
+} as const
+
+/**
+ * Cold Iron — a board of nails laid along the road bed. Real folklore: iron burns
+ * spirits. It only bites what is standing on it IN LIGHT, so an iron strip in the
+ * dark is an investment waiting for a lantern, not a defense.
+ *
+ * A walker at 30 px/s dwells 3.0s on the 90px strip → 7 ticks → 56 damage per pass.
+ */
+export const COLD_IRON = {
+  cost: 25,
+  /** Laid along the road; auto-orients to the nearest road segment. */
+  length: 90,
+  /** Wide enough to cover the walkers' ±9px wobble. */
+  width: 26,
+  tickDamage: 8,
+  tickInterval: 0.4,
   minSpacing: 50,
 } as const
 
@@ -68,14 +83,13 @@ export const NIGHT_1_STARTING_OIL = 75
 // ─── §6 Enemy roster ────────────────────────────────────────────────────────
 
 /**
- * INTERIM number for the feel week, verified by simulation: under flat-core falloff a
- * walker dwells ~7.7s in one lantern's lit chord (max ~196 damage), so 190 HP is a
- * one-lantern kill with ~10% margin. Retuned again at build-order step 3 when the
- * roster splits and lanterns stop dealing damage — do not polish this value before
- * then.
+ * Retuned for the split roster (consult §1-S5 target): the baseline enemy dies to
+ * one lantern + one Cold Iron with ~25% margin. Iron deals 56 per pass; 45 HP dies
+ * at the sixth tick, 2.4s into a 3.0s dwell. Lanterns alone now kill nothing at all —
+ * a lit road with no iron is a road you can watch them walk down.
  */
 export const ROAD_WALKER = {
-  hp: 190,
+  hp: 45,
   speed: 30,
   radius: 9,
   color: 0x8fa9b8,

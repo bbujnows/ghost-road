@@ -35,6 +35,7 @@ export default function App() {
   const resume = useCallback(() => gameRef.current?.resume(), [])
   const restart = useCallback(() => gameRef.current?.restart(), [])
   const toggleSpeed = useCallback(() => gameRef.current?.toggleSpeed(), [])
+  const selectWard = useCallback((id: 'lantern' | 'iron') => gameRef.current?.selectWard(id), [])
 
   return (
     <div className="app">
@@ -47,6 +48,7 @@ export default function App() {
           onResume={resume}
           onRestart={restart}
           onToggleSpeed={toggleSpeed}
+          onSelectWard={selectWard}
         />
       </div>
     </div>

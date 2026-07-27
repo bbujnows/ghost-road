@@ -1,18 +1,19 @@
 import { Container, Graphics } from 'pixi.js'
-import { LANTERN } from './balance'
+import { COLD_IRON, LANTERN } from './balance'
 import type { Light, LightingSystem } from './lighting'
 import type { RoadWalker } from './enemies'
 
 /**
- * Lantern Post. design-doc §5.
+ * Wards, not guns — and after the roster split (consult §4), not even the lantern
+ * shoots. Light and damage are separate purchases:
  *
- * Wards are not guns — the lantern's primary job is making a stretch of road real
- * enough to be fought in. The damage is secondary and only lands on something already
- * standing in its own light.
+ *  - The Lantern Post makes a stretch of road fightable. It deals nothing.
+ *  - Cold Iron does the fighting, and only inside light.
  *
- * Salt lines, the church bell, the fiddler, and the spring line are all specified in
- * §5 but not built. Build order is §13.
+ * Salt lines, the church bell, the fiddler, the spring line, and the bottle tree are
+ * specced (design doc §5 / consult §4) but not built. Build order is consult §9.
  */
+
 export class Lantern {
   readonly light: Light
   readonly gfx = new Container()
@@ -21,9 +22,6 @@ export class Lantern {
   readonly x: number
   readonly y: number
 
-  // Never fires the instant a target lights up. See LANTERN.initialDelay.
-  private cooldown: number = LANTERN.initialDelay
-  private hadTarget = false
   private housing = new Container()
   private flame = new Graphics()
   private sway = Math.random() * Math.PI * 2
@@ -46,7 +44,6 @@ export class Lantern {
     post.ellipse(0, 0, 9, 3.5).fill({ color: 0x000000, alpha: 0.3 })
     post.moveTo(-2, 0).lineTo(-2.5, -40).lineTo(2.5, -40).lineTo(2, 0).fill(0x4a3d30)
     post.moveTo(-1, -34).lineTo(-1, -38).lineTo(11, -38).lineTo(11, -35).fill(0x3d3128)
-    // Bracing stones at the foot.
     post.ellipse(-6, -1, 4, 2.5).fill(0x3a3830)
     post.ellipse(6, -1, 3.5, 2).fill(0x342f28)
 
@@ -74,48 +71,86 @@ export class Lantern {
   /** Called every frame, including while a wave is between spawns. */
   animate(dt: number) {
     this.sway += dt * 2.4
-    // The lamp swings a little on its hook; the flame lags behind it.
     this.housing.rotation = Math.sin(this.sway) * 0.045
     this.flame.scale.set(1 + Math.sin(this.sway * 3.1) * 0.09, 1 + Math.sin(this.sway * 2.3) * 0.13)
     this.flame.position.x = Math.sin(this.sway) * 1.2
   }
+}
 
-  update(dt: number, walkers: RoadWalker[], lighting: LightingSystem): { x: number; y: number } | undefined {
-    // Clamped at zero. Left to run negative while idle, the lantern banks readiness
-    // and lands a free shot the instant anything crosses into its light.
-    this.cooldown = Math.max(0, this.cooldown - dt)
+/**
+ * Cold Iron: a board of square-cut nails laid lengthwise along the road bed.
+ *
+ * It ticks against everything standing on it — but only what the light has made
+ * damageable takes the bite. Laying iron in the dark is legal on purpose: it is an
+ * investment waiting for a lantern, which is exactly the reveal/kill split the
+ * design wants the player thinking about.
+ */
+export class ColdIron {
+  readonly gfx = new Container()
+  readonly x: number
+  readonly y: number
+  /** Radians; snapped to the nearest road segment at placement. */
+  readonly angle: number
 
-    // Fire on the nearest target that is actually damageable.
-    let best: RoadWalker | null = null
-    let bestDist = Infinity
+  private cooldown = 0
+  private glints: Graphics
 
+  constructor(x: number, y: number, angle: number) {
+    this.x = x
+    this.y = y
+    this.angle = angle
+
+    const L = COLD_IRON.length
+    const W = COLD_IRON.width
+
+    const board = new Graphics()
+    // Shadow, then weathered board, then the nail heads in two staggered rows.
+    board.roundRect(-L / 2, -W / 2 + 2, L, W, 4).fill({ color: 0x000000, alpha: 0.28 })
+    board.roundRect(-L / 2, -W / 2, L, W - 3, 4).fill(0x3a332b)
+    board.roundRect(-L / 2 + 2, -W / 2 + 2, L - 4, 4, 2).fill({ color: 0x474034, alpha: 0.8 })
+
+    for (let i = 0; i < 9; i++) {
+      const nx = -L / 2 + 8 + i * ((L - 16) / 8)
+      board.rect(nx - 1.4, -6, 2.8, 2.8).fill(0x8d949c)
+      board.rect(nx - 1.4 + 4, 3, 2.8, 2.8).fill(0x7a828b)
+    }
+
+    this.glints = new Graphics()
+
+    this.gfx.addChild(board, this.glints)
+    this.gfx.position.set(x, y)
+    this.gfx.rotation = angle
+  }
+
+  /** True if a world point stands on the strip. */
+  private covers(px: number, py: number): boolean {
+    const dx = px - this.x
+    const dy = py - this.y
+    const cos = Math.cos(-this.angle)
+    const sin = Math.sin(-this.angle)
+    const lx = dx * cos - dy * sin
+    const ly = dx * sin + dy * cos
+    return Math.abs(lx) <= COLD_IRON.length / 2 && Math.abs(ly) <= COLD_IRON.width / 2
+  }
+
+  /** Returns the positions of everything it bit this tick, for the ember burst. */
+  update(dt: number, walkers: RoadWalker[], lighting: LightingSystem): { x: number; y: number }[] {
+    this.cooldown -= dt
+    this.glints.clear()
+
+    if (this.cooldown > 0) return []
+    this.cooldown = COLD_IRON.tickInterval
+
+    const hits: { x: number; y: number }[] = []
     for (const w of walkers) {
-      const d = Math.hypot(w.x - this.x, w.y - this.y)
-      if (d > LANTERN.radius) continue
-      if (!w.targetable(lighting)) continue
-      if (d < bestDist) {
-        bestDist = d
-        best = w
+      if (!this.covers(w.x, w.y)) continue
+      if (w.applyDamage(COLD_IRON.tickDamage, lighting) > 0) {
+        hits.push({ x: w.x, y: w.y })
+        // The nails glint where they bite.
+        const lx = (Math.random() - 0.5) * COLD_IRON.length * 0.8
+        this.glints.rect(lx, -5 + Math.random() * 10, 3, 3).fill({ color: 0xd8e2ea, alpha: 0.9 })
       }
     }
-
-    // Re-arming on acquisition is what actually stops the alpha strike: two
-    // overlapping lanterns can no longer both fire on the frame a walker lights up.
-    if (!best) {
-      this.hadTarget = false
-      return
-    }
-    if (!this.hadTarget) {
-      this.hadTarget = true
-      this.cooldown = Math.max(this.cooldown, LANTERN.initialDelay)
-      return
-    }
-
-    if (this.cooldown > 0) return
-
-    best.applyDamage(LANTERN.damage, lighting)
-    this.cooldown = LANTERN.fireInterval
-    // Where the hit landed, so the game can throw embers off it.
-    return { x: best.x, y: best.y }
+    return hits
   }
 }

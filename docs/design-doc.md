@@ -256,24 +256,24 @@ Wards, not guns. Nothing in this game shoots.
 
 | Ward | Oil | Function |
 | --- | --- | --- |
-| **Lantern Post** | 30 | `intensity 0.85, radius 150`. Deals **14 damage / 0.55s** to one Lit target in radius. The only damage source that scales. |
+| **Lantern Post** | 15 | **Pure light, zero damage** (roster split, built 2026-07-27). `intensity 0.85, radius 120`, delivering lit to ~102px under flat-core. It makes ground fightable; something else does the fighting. |
+| **Cold Iron** | 25 | A 90×26px board of nails laid **along the road bed** (auto-snaps to the nearest segment). **8 damage per 0.4s** to everything standing on it *in light* — ~56 per pass at walker speed. Legal to lay in the dark as an investment awaiting a lantern. Folklore: iron burns spirits. |
 | | | Under the flat-core falloff (§2.2), authored radius ≈ delivered radius; the old `^1.6` curve delivered a 77px kill zone from a stated 150 and is the reason it was cut. The placement preview always draws the *delivered* Lit and Dim radii, never the raw number. |
 | **Salt Line** | 20 | Not a light. A drawn segment up to 140px. Crossing costs 25 damage and 50% slow for 2s. **Depletes after 6 crossings.** Works in full dark. |
 | **Church Bell** | 65 | One per map. Activated, 45s cooldown. Staggers every enemy on screen 2.5s and forces them to Dim band for 6s. |
 | **Fiddler** | 55 | Porch-bound. **One aura**: ward damage +20% in 260px (ruling 2026-07-27 — tune-switching cut; nobody opens a menu mid-wave in a five-minute game). Upgrade branches choose bigger radius or Kara move speed. Flees if an enemy comes within 120px. |
 | **Spring Line** | 45 | Running water. 110px barrier enemies path around. Scatters lantern light (§2.5). Heals and traps Kara. |
 
-**Lantern upgrades:** Oil Lamp (+25 oil) → `radius 190, damage 18`. Storm Lantern (+35 oil) → same,
-plus immunity to wind-snuff, which matters from Night 4 onward.
+**Lantern upgrades** (branches, per the consult structure — not yet built): *Storm* (wind-proof,
+matters from Night 4) / *Mirror* (oval pool stretched along the road).
 
 His one tune is *Cold Frost Morning*. The cut tunes survive as his upgrade branches: *Wayfaring
 Stranger* (radius branch) and *Shady Grove* (Kara-speed branch).
 
-**Adopted, not yet specced here:** the light/damage roster split from
-[redesign-consult.md](redesign-consult.md) §4 — Lantern Post becomes pure light (15 oil, flat pool
-120), with damage moving to **Cold Iron** (25, floor strip, spirits resist) and the **Bottle
-Tree** (45, traps three enemies). This section gets rewritten when build-order step 3 lands;
-until then the consult doc's numbers are the spec.
+**The roster split is built** (2026-07-27): Lantern Post is pure light, Cold Iron is the damage
+layer. Still to come from [redesign-consult.md](redesign-consult.md) §4: the **Bottle Tree**
+(45 oil, traps three enemies — the Hant Cat's counter), iron's 50% spirit resist (step 5,
+counterplay pass), and the upgrade branches (step 6).
 
 ### 5.1 Synergies and anti-synergies
 
@@ -314,12 +314,13 @@ Only the Road Walker is specified so far; the rest get numbers as they are built
 
 | Enemy | HP | Speed | Porch damage |
 | --- | --- | --- | --- |
-| **Road Walker** | 190 *(interim)* | 30 px/s | 8 |
+| **Road Walker** | 45 | 30 px/s | 8 |
 
-> **190 is a feel-week interim** under flat-core falloff, verified by simulation: a walker dwells
-> ~7.7s in one lantern's lit chord (max ~196 damage), so 190 is a one-lantern kill with ~10%
-> margin. It gets retuned at build-order step 3 when lanterns stop dealing damage. The derivation
-> below reflects the *old* falloff and stands as history.
+> **45 HP is tuned against the split roster** (consult §1-S5 target): Cold Iron deals ~56 per
+> pass (7 ticks × 8 over a 3.0s dwell on the 90px strip), so one lantern + one iron kills with
+> ~25% margin, and the kill lands at the sixth tick. Lanterns alone kill **nothing** — a lit road
+> with no iron is a road you watch them walk down. The derivations below reflect earlier tunings
+> and stand as history.
 
 The Road Walker's numbers are derived rather than picked. A lantern does `14 / 0.55 ≈ 25.5` dps,
 and a walker crossing a lantern's 154px Lit chord at 30 px/s is exposed for **5.1 seconds**, taking
