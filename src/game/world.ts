@@ -93,6 +93,7 @@ export class Smoke {
   readonly container = new Container()
   private puffs: { x: number; y: number; life: number; size: number; drift: number }[] = []
   private spawn = 0
+  private readonly gfx = new Graphics()
 
   private readonly ox: number
   private readonly oy: number
@@ -100,24 +101,27 @@ export class Smoke {
   constructor(ox: number, oy: number) {
     this.ox = ox
     this.oy = oy
+    this.container.addChild(this.gfx)
   }
 
   update(dt: number) {
     this.spawn -= dt
     if (this.spawn <= 0) {
-      this.spawn = 0.5
-      this.puffs.push({ x: 0, y: 0, life: 1, size: 5 + Math.random() * 4, drift: 0.6 + Math.random() })
+      this.spawn = 0.7
+      this.puffs.push({ x: 0, y: 0, life: 1, size: 3 + Math.random() * 2, drift: 0.5 + Math.random() * 0.7 })
     }
 
-    this.container.removeChildren()
+    // One reused Graphics rather than a fresh child per puff per frame, which leaked.
+    this.gfx.clear()
     for (const p of this.puffs) {
-      p.life -= dt * 0.18
-      p.y -= 14 * dt
-      p.x += p.drift * 9 * dt
-      const puff = new Graphics()
-        .circle(this.ox + p.x, this.oy + p.y, p.size * (2 - p.life))
-        .fill({ color: 0x6d7b7a, alpha: p.life * 0.16 })
-      this.container.addChild(puff)
+      // Short-lived and barely grown. A long life plus 2x growth turns eleven
+      // overlapping circles into a solid beam across the sky rather than a plume.
+      p.life -= dt * 0.42
+      p.y -= 11 * dt
+      p.x += p.drift * 7 * dt
+      this.gfx
+        .circle(this.ox + p.x, this.oy + p.y, p.size * (1.6 - p.life * 0.6))
+        .fill({ color: 0x6d7b7a, alpha: p.life * 0.085 })
     }
     this.puffs = this.puffs.filter((p) => p.life > 0)
   }
@@ -403,7 +407,8 @@ export function buildScene(width: number, height: number): BuiltScene {
     y: l.y + HOMESTEAD.y,
   }))
 
-  const smoke = new Smoke(HOMESTEAD.x + 47, HOMESTEAD.y - 180)
+  // Centred on the chimney cap: x = right - 45, y = ridge - 32 in homestead-local terms.
+  const smoke = new Smoke(HOMESTEAD.x + 60, HOMESTEAD.y - 186)
   scene.addChild(smoke.container)
 
   return { scene, emissive, lights, smoke }

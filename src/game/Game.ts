@@ -129,7 +129,9 @@ export class Game {
     this.bloom = new Bloom(WORLD_WIDTH, WORLD_HEIGHT)
     this.bloom.source.addChild(built.emissive)
 
-    this.kara = new Kara(HOMESTEAD.x - 100, HOMESTEAD.y - 20)
+    // In the yard, in front of the porch. Her rig's ground plane is y = 0, so placing
+    // her above HOMESTEAD.y leaves her standing on air over the deck.
+    this.kara = new Kara(HOMESTEAD.x - 175, HOMESTEAD.y + 48)
     this.scene.addChild(this.kara.body)
     // Her white is emissive too — it is the one thing the dark must never take.
     this.bloom.source.addChild(this.kara.markings)
