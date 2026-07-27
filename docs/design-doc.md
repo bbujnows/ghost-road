@@ -1,6 +1,9 @@
 # Ghost Road — Design Document
 
-**Version 1.2 · 2026-07-27**
+**Version 2.0 · 2026-07-27** — incorporates the accepted rulings from the external design review
+([redesign-consult.md](redesign-consult.md)). Where that document proposes systems not yet specced
+here (the light/damage ward split, Kara's active kit, the content plan), its build order is the
+adopted roadmap and its numbers are the starting spec.
 
 An Appalachian folk-horror tower defense. Seven nights defending a homestead at the end of an
 abandoned logging road. Kara — a gold Labrador/pit mix with white paws, belly, and chest — is the
@@ -33,25 +36,32 @@ falls into.
 | --- | --- | --- |
 | **Dark** | `L < 0.15` | Enemies are invisible and untargetable. Only Kara, salt lines, and the bell operate here. |
 | **Dim** | `0.15 ≤ L < 0.35` | Enemies are *visible* but still not damageable. This band exists so that reveal and damage are separate rewards. |
-| **Lit** | `0.35 ≤ L < 0.75` | Enemies are damageable. Wards deal listed damage. |
-| **Bright** | `L ≥ 0.75` | Damageable, and wards deal **+25% damage**. Rewards deliberately overlapping two lanterns rather than spreading them evenly. |
+| **Lit** | `L ≥ 0.35` | Enemies are damageable. Wards deal listed damage. |
+
+> **The Bright band is cut** (ruling 2026-07-27). +25% inside a 21px ring was decorative — it only
+> ever rewarded overlap, which was already dominant. Overlap now buys coverage insurance; damage
+> bonuses live in the Fiddler aura and ward upgrade tiers, where they are legible. If playtest
+> misses it, the fallback is Bright at threshold 0.65 as a 2 dps burn, never a multiplier.
 
 Ambient moonlight is `L = 0.08` everywhere — permanently below the Dark threshold. The moon is
 atmosphere, never a solution.
 
 ### 2.2 Accumulation and falloff
 
-Per light source `i` at distance `d`:
+Per light source `i` at distance `d`, **flat-core falloff** (ruling 2026-07-27, replacing the
+original `^1.6` exponent):
 
 ```
-contribution_i = intensity_i × (1 − clamp(d / radius_i, 0, 1))^1.6
-L = min(1, Σ contribution_i) × (1 − 0.5 × fogDensity)
+core_i    = 0.6 × radius_i
+falloff_i = d ≤ core_i ? 1 : 1 − smoothstep((d − core_i) / (radius_i − core_i))
+L         = min(1, Σ intensity_i × falloff_i) × (1 − 0.5 × fogDensity)
 ```
 
-The `^1.6` exponent gives a hot core and a long soft tail, so a lantern reads as a pool rather
-than a spotlight. Fog is a straight multiplier on the total — on Night 5 at `fogDensity = 0.6`,
-every light in the game loses 30% of its value, which is a global difficulty lever that costs
-nothing to implement and reads instantly to the player.
+Full intensity out to 60% of radius, then a smooth fall to zero at the edge. The old exponent
+made every authored number a lie — radius 150 delivered a 77px kill zone and enemies went
+invisible at 118px. Under flat-core, **authored radius ≈ delivered radius**, and dwell time in
+the damage zone roughly doubles, which is what un-brittles the kill margins. Fog remains a
+straight multiplier on the total — a global difficulty lever that reads instantly.
 
 ### 2.3 Rendering
 
@@ -146,7 +156,7 @@ enough — do not add a permadeath mode.
 | **Bubbles** | `B` + click | 6s, 3 charges, +1 charge per 8s | The only reliable way to break the hose lock. |
 | **Show Belly** | `X` | 14s (11s at T3+) | 1.4s flash + 0.8s getting up. Takes **2× damage** and accepts no commands for the full 2.2s. |
 | **Blanket** | `Z` | — | Minimum 3.0s under. Calling her out then takes `3.0 − 0.4 × bondTier` seconds (floor 1.0s) of coaxing. |
-| **Hold** | `H` | 20s | Unlocked at Bond T2. Plants her; enemies within 90px are slowed 35% and cannot pass. Max 8s. She takes damage the whole time. |
+| **Hold** | `H` | 20s | Requires the Rope toy equipped that night (§4). Plants her; enemies within 90px are slowed 35% and cannot pass. Max 8s. She takes damage the whole time. |
 | **Throw ball** | `T` when she drops one | — | +3 bond, but she is out of position ~4s fetching. |
 | **Lead** | `L` | Once per night | Unlocked at Bond T5, usable Night 7 only. Fog → 0 within 300px of her for 12s. |
 
@@ -168,17 +178,21 @@ worth watching because it is rare.**
 The perk snaps up fast and comes down slowly, breathing shallows, and the tail stops wagging. None
 of it is surfaced in the HUD, deliberately: the player is meant to learn to watch her.
 
-### 3.3 The hose lock
+### 3.3 The water (softened from the original hard lock — ruling 2026-07-27)
 
 While Kara is within `0.5 × barrier radius` of an active spring line she enters **Play**:
 
 - Barrier radius × 1.3
 - She heals **8 HP/s** and any curse effect is cleansed
 - Bond +0.5/s (capped at +6 per night)
-- **She will not respond to Send.** Only a bubble pulls her out, or the blanket call.
+- When idle with no command, she **drifts toward nearby water on her own** — leave her
+  unattended near a spring line and you will find her in it.
 
-Her happiest animation is a soft trap. The player will place a hose to win a lane and then spend a
-bubble charge every wave getting her out of it.
+**A plain Send pulls her out.** No bubble tax. The original design had her refuse to leave
+without a bubble, and the review called it correctly: that charged the player to undo something
+the game did to them. What survives instead is the *reluctance* — on being called out of the
+water she obeys, but the animation shows it: a last snap at the spray, a full-body shake, and a
+look back. The personality is in the leaving, not in a fee.
 
 ### 3.4 Bond
 
@@ -186,12 +200,14 @@ Bond runs 0–100 across the campaign.
 
 | Tier | Bond | Unlock |
 | --- | --- | --- |
-| T0 | 0–14 | — |
-| T1 | 15–29 | Ear-Perk radius 280 → 350 |
-| T2 | 30–49 | **Hold** |
-| T3 | 50–69 | Show Belly cooldown 14s → 11s; blanket coaxing −0.4s/tier |
-| T4 | 70–89 | Down recovery 25s → 12s |
-| T5 | 90–100 | **Lead** |
+| T1 | 15–34 | Ear-Perk radius 280 → 350 |
+| T2 | 35–59 | Show Belly cooldown 14s → 11s; blanket coaxing −0.4s/tier |
+| T3 | 60–84 | Down recovery 25s → 12s |
+| T4 | 85–100 | **Lead** |
+
+**Hold is no longer bond-gated** (ruling 2026-07-27) — it lives on the Rope toy (§4), making it a
+per-night build choice instead of a permanent unlock. The bond track simplifies to four tiers,
+each one felt: better ears, faster belly, faster recovery, and Lead.
 
 **Gains:** throw a dropped ball +3 (≈4 opportunities/night) · rest her between nights +5 · feed her
 +4 · playing in the hose +0.5/s to a +6/night cap · finish a night with her uninjured +8.
@@ -223,7 +239,7 @@ choosing is a per-night build decision, not a purchase.
 | **Ragged Fox** (her favorite) | Bond gain ×1.5 for the night | Starting |
 | **Tennis Ball** | Ball drops +50% more often; +2 stash per retrieve | Starting |
 | **The Squeaker** | Bark alarm may fire **twice** this night; Ear-Perk lead time 2.0s → 2.2s | 8 |
-| **The Rope** | Hold duration 8s → 13s; Hold slow 35% → 50% | 12 |
+| **The Rope** | **Grants Hold** for the night (§3.2) | 12 |
 | **Stuffed Duck** | Hose amplification +25%; she takes **no damage** while in water | 14 |
 | **Weighted Bear** | Kara HP 100 → 150; move speed −15% | 16 |
 | **Sock Monkey** | Bubbles: +2 max charges; regen 8s → 5s | 18 |
@@ -241,17 +257,23 @@ Wards, not guns. Nothing in this game shoots.
 | Ward | Oil | Function |
 | --- | --- | --- |
 | **Lantern Post** | 30 | `intensity 0.85, radius 150`. Deals **14 damage / 0.55s** to one Lit target in radius. The only damage source that scales. |
-| | | ⚠️ **Radius is not pool size.** Under the §2.2 falloff, a lantern is Bright only to **21px**, Lit to **77px**, and Dim to **118px** — past that its own light is below the visibility floor. The 150 is the outer bound of any contribution, not what the player gets. The placement preview must draw 77 and 118, never 150. |
+| | | Under the flat-core falloff (§2.2), authored radius ≈ delivered radius; the old `^1.6` curve delivered a 77px kill zone from a stated 150 and is the reason it was cut. The placement preview always draws the *delivered* Lit and Dim radii, never the raw number. |
 | **Salt Line** | 20 | Not a light. A drawn segment up to 140px. Crossing costs 25 damage and 50% slow for 2s. **Depletes after 6 crossings.** Works in full dark. |
 | **Church Bell** | 65 | One per map. Activated, 45s cooldown. Staggers every enemy on screen 2.5s and forces them to Dim band for 6s. |
-| **Fiddler** | 55 | Porch-bound. 260px aura, three switchable tunes (8s to change). Flees if an enemy comes within 120px. |
+| **Fiddler** | 55 | Porch-bound. **One aura**: ward damage +20% in 260px (ruling 2026-07-27 — tune-switching cut; nobody opens a menu mid-wave in a five-minute game). Upgrade branches choose bigger radius or Kara move speed. Flees if an enemy comes within 120px. |
 | **Spring Line** | 45 | Running water. 110px barrier enemies path around. Scatters lantern light (§2.5). Heals and traps Kara. |
 
 **Lantern upgrades:** Oil Lamp (+25 oil) → `radius 190, damage 18`. Storm Lantern (+35 oil) → same,
 plus immunity to wind-snuff, which matters from Night 4 onward.
 
-**Fiddler tunes:** *Cold Frost Morning* (+25% ward damage) · *Wayfaring Stranger* (+30% light
-radius) · *Shady Grove* (Kara +40% move speed, +2 bond/min).
+His one tune is *Cold Frost Morning*. The cut tunes survive as his upgrade branches: *Wayfaring
+Stranger* (radius branch) and *Shady Grove* (Kara-speed branch).
+
+**Adopted, not yet specced here:** the light/damage roster split from
+[redesign-consult.md](redesign-consult.md) §4 — Lantern Post becomes pure light (15 oil, flat pool
+120), with damage moving to **Cold Iron** (25, floor strip, spirits resist) and the **Bottle
+Tree** (45, traps three enemies). This section gets rewritten when build-order step 3 lands;
+until then the consult doc's numbers are the spec.
 
 ### 5.1 Synergies and anti-synergies
 
@@ -371,8 +393,8 @@ Two modes, chosen at campaign start and locked for the run.
 
 - Homestead HP **resets to 100 at the start of every night.**
 - At 0 HP the night ends in failure and is **replayed from wave 1**.
-- **Stash and bond earned during the failed night are kept.** Only the "finished uninjured" +8
-  bond bonus is forfeited.
+- **Stash earned during the failed night is kept. Bond gains are not** (ruling 2026-07-27 —
+  keeping both made deliberate failure a bond farm).
 - No cap on retries.
 
 The intent is that a bad night costs four minutes and teaches you the lane you misjudged. This is
@@ -442,9 +464,14 @@ Two currencies, deliberately separated so that in-night tactics and between-nigh
 compete for the same pool.
 
 **Lamp oil** — in-night only, does not carry over.
-- Starting oil: Night 1 = 90, rising to 150 by Night 5, then **cut to 90 on Night 6**.
-- +6 per enemy killed in the Lit band. +2 per enemy killed by salt.
-- The differential is intentional: salt is the cheap answer to a dark lane, and it keeps you poor.
+- **Income floor: 25 oil per wave, guaranteed** (ruling 2026-07-27). The original kill-gated
+  economy was a death spiral by construction — kills funded lanterns which enabled kills, so a
+  bad opening was unrecoverable. Kills now accelerate; they never gate.
+- Plus **+4 per enemy killed in the Lit band, +2 per salt kill.** The differential is intentional:
+  salt is the cheap answer to a dark lane, and it keeps you poor.
+- Starting oil: Night 1 = 75, rising through Night 5, then cut on Night 6. With the split-roster
+  prices this buys a working defense — two lanterns and one damage ward — before the first spawn,
+  without covering everything.
 
 **Stash** — between-night only, carries over. Kara fetches it.
 - She retrieves one item per **3 kills**. Each retrieval is a **6-second round trip during which she
@@ -532,9 +559,25 @@ white paws already told the player, and "Kara is always audible" survives intact
 note: the offset must be small enough that it reads as *unease* rather than as an obvious tell —
 start at 40ms and −15 cents and tune down, not up. Settled 2026-07-27.
 
-**The church bell.** Ships as specced: 65 oil, full 5-second Ear-Perk blackout. It is the best
-anti-synergy in the design and the kind of thing that only proves unfair once a night has actually
-been played with it. Revisit after playtest, not before.
+**The church bell.** Ships as originally ruled: 65 oil, full 5-second Ear-Perk blackout, revisit
+after playtest. The design review proposed softening to 3s; that proposal is noted and waits on
+the same playtest — the earlier ruling stands until play says otherwise.
+
+**The 2026-07-27 consultation rulings** (full reasoning in
+[redesign-consult.md](redesign-consult.md)):
+
+1. **Spring Line hard lock softened, not cut.** She drifts to water when idle and amplifies it,
+   but a plain Send pulls her out — reluctantly, visibly. No bubble tax. (§3.3)
+2. **Bright band cut.** Damage bonuses move to the Fiddler and upgrade tiers. (§2.1)
+3. **Fiddler simplified to one aura**, the cut tunes becoming his upgrade branches. (§5)
+4. **Hold moved from Bond T2 to the Rope toy**; bond simplifies to four tiers. (§3.4, §4)
+5. **Income floor**: 25 oil/wave guaranteed, kills accelerate rather than gate. (§9)
+6. **Flat-core falloff** replaces the `^1.6` exponent; authored radius ≈ delivered. (§2.2)
+7. **Retry keeps stash, not bond** — closes the deliberate-failure bond farm. (§7.1)
+
+Also adopted as roadmap: the consult doc's **build order** (feel week first — fast-forward, wave
+preview, hit feedback, falloff — then economy, then the roster split, then Kara's actives) and
+its **positioning**: the hook is the dog, the light is the terrain, the horror is the amplifier.
 
 ### 12.2 Still open
 
