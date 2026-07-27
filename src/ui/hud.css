@@ -1,0 +1,179 @@
+/* Frosted, low-light UI. It should never be brighter than the lanterns. */
+
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  color: #d8dbd4;
+}
+
+.hud-top,
+.hud-bottom {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.panel {
+  background: rgba(10, 18, 22, 0.62);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(198, 214, 210, 0.12);
+  border-radius: 10px;
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 108px;
+}
+
+.label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7d8c8a;
+}
+
+.value {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.value.oil {
+  color: #ffc078;
+}
+
+.meter {
+  height: 6px;
+  width: 130px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  transition: width 180ms ease-out;
+}
+
+.meter-fill.home {
+  background: linear-gradient(90deg, #ffc078, #ff8f6b);
+}
+
+.meter-fill.kara-hp {
+  /* Her gold, with the white of her chest at the leading edge. */
+  background: linear-gradient(90deg, #c9954a, #f6f1e6);
+}
+
+.kara {
+  min-width: 176px;
+}
+
+.kara-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tell {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffd08a;
+  animation: pulse 900ms ease-in-out infinite;
+}
+
+.kara-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3a0;
+}
+
+.state {
+  text-transform: lowercase;
+}
+
+.wards,
+.commands {
+  gap: 6px;
+}
+
+.ward,
+.command {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #9fb0ad;
+}
+
+.ward.selected {
+  color: #ffc078;
+}
+
+.ward-cost {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: #7d8c8a;
+}
+
+kbd {
+  min-width: 20px;
+  text-align: center;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid rgba(198, 214, 210, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.command.ready {
+  color: #8fd8a8;
+}
+
+.command.cooling {
+  color: #6c7a78;
+}
+
+/* She is silent all game. This should be the loudest thing in it. */
+.bark {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 42px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #fff2e0;
+  text-shadow: 0 0 34px rgba(255, 160, 90, 0.9);
+  animation: bark 200ms steps(2) infinite;
+}
+
+.veil {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 10, 12, 0.55);
+  backdrop-filter: blur(3px);
+  font-size: 24px;
+  letter-spacing: 0.08em;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes bark {
+  50% {
+    transform: scale(1.04);
+  }
+}
