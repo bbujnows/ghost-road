@@ -207,6 +207,54 @@ kbd {
   color: #9fb8cf;
 }
 
+.kara-panel {
+  min-width: 172px;
+  gap: 5px;
+}
+
+.ability {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ability.ready {
+  color: #ffc078;
+}
+
+.ability.cooling {
+  color: #6c7a78;
+}
+
+.ability-name {
+  flex: 1;
+}
+
+.ability-state {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pips {
+  display: flex;
+  gap: 3px;
+}
+
+.pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid rgba(198, 214, 210, 0.3);
+}
+
+.pip.full {
+  background: #ffc078;
+  border-color: #ffc078;
+}
+
 .banner {
   position: absolute;
   top: 108px;

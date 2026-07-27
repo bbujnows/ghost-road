@@ -96,9 +96,14 @@ the player having learned to read it.
 ### 2.5 The three light interactions that matter
 
 **Show Belly.** Spawns a light at Kara: `intensity 0.9, radius 260`, held 1.4s, eased to zero over
-the final 0.4s. It does **not** cast shadows — it is a reflection off her belly, and making it
-shadowless both reads as softer and keeps it off the 8-light shadow budget. A cluster of Dim-band
-enemies is pushed into Lit for the duration. This is the game's manual burst window.
+the final 0.4s, then 0.8s on the ground getting up — 2.2s of total helplessness. It does **not**
+cast shadows: it is a reflection off her belly, which reads softer and keeps it off the 8-light
+shadow budget.
+
+**Measured reach: it makes ground Lit out to 222px and visible out to 242px** — larger than a
+lantern's entire pool, and it lands anywhere on the map she can reach. This is the game's manual
+burst window and the main reason her position matters. The light dies *before* she is back on her
+feet, deliberately: the reward ends while the risk is still running.
 
 **Hose mist.** The spring line is a weak light on its own (`intensity 0.20, radius 110` — Dim, never
 Lit). Its real function is **scattering**: any lantern whose radius overlaps the mist volume gets
@@ -107,10 +112,23 @@ road than a lantern anywhere else. This is the game's central ward combo, and it
 priced like a lantern despite dealing no damage.
 
 **Bubble glow.** Each bubble is a moving light: `intensity 0.22, radius 55, lifetime 5s`. Alone it
-is Dim — it reveals, it does not damage. **But a bubble drifting through hose mist is boosted to
-`0.40`**, which crosses the Lit threshold. A bubble trail laid through a mist curtain is a moving
-damage-enabling corridor. This was not designed in; it fell out of the scattering rule, and it is
-worth keeping.
+peaks at `L = 0.30` — squarely Dim, so **it reveals and never kills.** Keeping it under the 0.35
+threshold is what stops Bubbles from replacing the Lantern Post.
+
+**But light accumulates**, and that produces an emergent combo worth keeping (measured, built
+2026-07-27): at a lantern's fringe the two stack.
+
+| Distance from a lantern | Lantern alone | With a bubble |
+| --- | --- | --- |
+| 105px | 0.28 · Dim | **0.50 · Lit** |
+| 110px | 0.18 · Dim | **0.40 · Lit** |
+| 115px | 0.11 · Dark | 0.33 · Dim |
+
+So a bubble parked on a lantern's edge temporarily **extends its kill zone by ~10px**, and a
+bubble trail through overlapping pools briefly widens the whole corridor. It was not designed in;
+it falls out of additive light, it costs a charge and lasts five seconds, and it rewards a player
+who has understood the band system. Keep it. The same rule will produce the stronger version once
+the Spring Line's mist scattering exists.
 
 ### 2.6 The homestead's own light
 
@@ -153,15 +171,21 @@ enough — do not add a permadeath mode.
 | Command | Input | Cooldown | Cost / catch |
 | --- | --- | --- | --- |
 | **Send** | Right click | — | Free. She walks; she does not teleport. |
-| **Bubbles** | `B` + click | 6s, 3 charges, +1 charge per 8s | The only reliable way to break the hose lock. |
+| **Bubbles** | `B` + click | **2 charges, +1 per 8s** (consult ruling) | Her blink. She chases at 180px/s. Costs a charge, not a cooldown, so both can be spent at once when it matters. |
 | **Show Belly** | `X` | 14s (11s at T3+) | 1.4s flash + 0.8s getting up. Takes **2× damage** and accepts no commands for the full 2.2s. |
-| **Blanket** | `Z` | — | Minimum 3.0s under. Calling her out then takes `3.0 − 0.4 × bondTier` seconds (floor 1.0s) of coaxing. |
+| **Blanket** | `Z` | — | Minimum 3.0s under. Calling her out then takes `3.0 − 0.4 × bondTier` seconds (floor 1.0s) of coaxing. **Not built** — see below. |
 | **Hold** | `H` | 20s | Requires the Rope toy equipped that night (§4). Plants her; enemies within 90px are slowed 35% and cannot pass. Max 8s. She takes damage the whole time. |
 | **Throw ball** | `T` when she drops one | — | +3 bond, but she is out of position ~4s fetching. |
 | **Lead** | `L` | Once per night | Unlocked at Bond T5, usable Night 7 only. Fog → 0 within 300px of her for 12s. |
 
 **The Bark is not a command.** It fires automatically, at most once per night, when something
 physically reaches the homestead. See §10.
+
+**The Blanket is deliberately unbuilt** (2026-07-27). It is a panic button whose entire value is
+becoming untargetable — and **nothing in the game targets Kara yet.** Building it now would ship a
+button that costs 6 seconds of her presence and buys nothing, which is exactly the kind of ability
+that gets judged as bad when it is only premature. It lands with the **Bone Dog** in the
+counterplay pass, which is the threat it answers.
 
 **Ear-Perk is not a command either.** It is a readout. She lifts her ears and orients toward the
 nearest threat within radius, 2.0s before it becomes visible. From **Night 5**, one perk in six is

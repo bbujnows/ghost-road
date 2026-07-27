@@ -109,6 +109,46 @@ export const EAR_PERK_RADIUS = 280
 /** §3.2. She tells you this long before the threat becomes visible. */
 export const EAR_PERK_LEAD = 2.0
 
+export const KARA_WALK_SPEED = 95
+
+/**
+ * §3.2 Show Belly. She flops onto her back the way she does when she is playing, and
+ * her all-white belly turns up and throws reflected light across the area.
+ *
+ * The light is strong enough to push Dim ground into Lit on its own (0.9 + 0.08 ambient
+ * clears the 0.35 threshold out to ~230px), which makes this the player's manual answer
+ * to a clump the lanterns cannot reach. She is wide open for the whole 2.2s.
+ */
+export const SHOW_BELLY = {
+  cooldown: 14,
+  /** Light is up for this long, easing out over the final 0.4s. */
+  flash: 1.4,
+  /** Then she has to get back onto her feet. No commands accepted. */
+  recovery: 0.8,
+  lightIntensity: 0.9,
+  lightRadius: 260,
+  /** Damage multiplier against her while down. No threat targets her yet. */
+  vulnerability: 2,
+} as const
+
+/**
+ * §3.2 Bubbles. She chases them without hesitation — her blink, and the fastest
+ * repositioning tool in the game.
+ *
+ * Each bubble is a weak drifting light: 0.22 + 0.08 ambient sits in the Dim band, so a
+ * bubble trail **reveals without enabling damage.** That is the intended shape — it is
+ * a scouting tool, not a portable lantern.
+ */
+export const BUBBLES = {
+  maxCharges: 2,
+  /** Seconds to regain one charge. */
+  regen: 8,
+  chaseSpeed: 180,
+  lightIntensity: 0.22,
+  lightRadius: 55,
+  lifetime: 5,
+} as const
+
 // ─── §6 / §11 Night pacing ──────────────────────────────────────────────────
 
 /** §11: 3 waves, 55–70s each, 12s between. Counts are first-pass tuning. */

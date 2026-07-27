@@ -2,6 +2,7 @@ import { Application, Container, Graphics } from 'pixi.js'
 import {
   BAND_DIM,
   BAND_LIT,
+  BUBBLES,
   COLD_IRON,
   EAR_PERK_LEAD,
   FAST_FORWARD,
@@ -11,14 +12,16 @@ import {
   NIGHT_1_WAVES,
   OIL_PER_LIT_KILL,
   OIL_PER_WAVE,
+  SHOW_BELLY,
   WAVE_BREAK,
 } from './balance'
 import { Bloom, Motes, Sparks, vignette } from './atmosphere'
+import { Bubble } from './bubbles'
 import { Corpse, RoadWalker } from './enemies'
 import { Kara } from './kara'
 import type { Threat } from './kara'
 import { LightingSystem, bandOf, radiusForThreshold } from './lighting'
-import type { Band } from './lighting'
+import type { Band, Light } from './lighting'
 import { ColdIron, Lantern } from './wards'
 import { HOMESTEAD, ROAD, buildScene } from './world'
 import type { Smoke } from './world'
@@ -45,6 +48,11 @@ export interface GameState {
   helpOpen: boolean
   /** 1 or FAST_FORWARD. */
   speed: number
+  bellyReady: boolean
+  /** Seconds until Show Belly is available; 0 when ready. */
+  bellyCooldown: number
+  bubbleCharges: number
+  bubbleMax: number
   /** What the break is counting down to — count of walkers in the coming wave. */
   nextWaveCount: number
   lightUnderCursor: number
@@ -83,6 +91,8 @@ export class Game {
   private corpses: Corpse[] = []
   private lanterns: Lantern[] = []
   private irons: ColdIron[] = []
+  private bubbles: Bubble[] = []
+  private bellyLight!: Light
   private selectedWard: WardId = 'lantern'
   private preview = new Graphics()
 
@@ -148,6 +158,16 @@ export class Game {
 
     // In the yard, in front of the porch. Her rig's ground plane is y = 0, so placing
     // her above HOMESTEAD.y leaves her standing on air over the deck.
+    // Her Show Belly light. Always registered, driven to zero except during the flash,
+    // which avoids adding and removing lights from the array mid-frame.
+    this.bellyLight = this.lighting.add({
+      x: 0,
+      y: 0,
+      radius: SHOW_BELLY.lightRadius,
+      color: 0xfff4e0,
+      intensity: 0,
+    })
+
     this.kara = new Kara(HOMESTEAD.x - 175, HOMESTEAD.y + 48)
     this.scene.addChild(this.kara.body)
     // Her white is emissive too — it is the one thing the dark must never take.
@@ -221,6 +241,10 @@ export class Game {
         this.selectedWard = 'lantern'
       } else if (key === '2') {
         this.selectedWard = 'iron'
+      } else if (key === 'x') {
+        this.showBelly()
+      } else if (key === 'b') {
+        this.blowBubble()
       } else if (key === 'f') {
         this.toggleSpeed()
       } else if (key === '?' || key === '/' || key === 'h') {
@@ -274,6 +298,26 @@ export class Game {
 
   toggleSpeed() {
     this.speed = this.speed === 1 ? FAST_FORWARD : 1
+  }
+
+  /** §3.2 Show Belly. Ignored while the board is frozen. */
+  showBelly() {
+    if (this.inputLocked) return
+    this.kara.showBelly()
+  }
+
+  /**
+   * §3.2 Bubbles. Blown at the cursor; she chases it. The bubble outlives her arrival,
+   * so a trail of them lights a scouting line up the road.
+   */
+  blowBubble() {
+    if (this.inputLocked) return
+    const { x, y } = this.pointer
+    if (!this.kara.chaseBubble(x, y)) return
+
+    const bubble = new Bubble(x, y, this.lighting)
+    this.bubbles.push(bubble)
+    this.bloom.source.addChild(bubble.gfx)
   }
 
   /**
@@ -452,6 +496,13 @@ export class Game {
     }
     this.irons = []
 
+    for (const b of this.bubbles) {
+      this.lighting.remove(b.light)
+      this.bloom.source.removeChild(b.gfx)
+      b.gfx.destroy({ children: true })
+    }
+    this.bubbles = []
+
     this.homesteadHp = HOMESTEAD_MAX_HP
     this.oil = NIGHT_1_STARTING_OIL
     this.waveIndex = 0
@@ -569,6 +620,21 @@ export class Game {
     })
 
     this.kara.update(dt, this.lighting, threats)
+
+    // Her belly light rides the animation envelope, so the flash is exactly as long as
+    // the pose that earns it.
+    this.bellyLight.x = this.kara.x
+    this.bellyLight.y = this.kara.y - 8
+    this.bellyLight.intensity = SHOW_BELLY.lightIntensity * this.kara.bellyGlow
+
+    for (const bubble of this.bubbles) bubble.update(dt)
+    for (const bubble of this.bubbles.filter((b) => b.popped)) {
+      this.lighting.remove(bubble.light)
+      this.bloom.source.removeChild(bubble.gfx)
+      bubble.gfx.destroy({ children: true })
+    }
+    this.bubbles = this.bubbles.filter((b) => !b.popped)
+
     this.smoke.update(dt)
     this.renderPasses(dt)
     this.publish()
@@ -601,6 +667,10 @@ export class Game {
       paused: this.paused,
       helpOpen: this.helpOpen,
       speed: this.speed,
+      bellyReady: this.kara.bellyReady,
+      bellyCooldown: this.kara.bellyCooldownRemaining,
+      bubbleCharges: this.kara.bubbleCharges,
+      bubbleMax: BUBBLES.maxCharges,
       nextWaveCount:
         this.phase === 'break' && this.waveIndex < NIGHT_1_WAVES.length
           ? NIGHT_1_WAVES[this.waveIndex].count

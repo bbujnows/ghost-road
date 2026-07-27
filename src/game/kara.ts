@@ -1,5 +1,5 @@
 import { Container, Graphics } from 'pixi.js'
-import { EAR_PERK_RADIUS } from './balance'
+import { BUBBLES, EAR_PERK_RADIUS, KARA_WALK_SPEED, SHOW_BELLY } from './balance'
 import type { LightingSystem } from './lighting'
 
 /**
@@ -56,13 +56,20 @@ const WHITE = 0xf6f1e6
 const WHITE_FAR = 0xcfc9bb
 const NOSE = 0x241e1a
 
-const WALK_SPEED = 95
-
 /**
  * Drawn large for detail, then scaled down. She stands ~29px at the shoulder against
  * a 96px cabin wall, which is about right for a dog beside a one-storey cabin.
  */
 const SCALE = 0.58
+
+/** How far over she goes on a Show Belly. Just past upside-down, so the belly faces up. */
+const ROLL_ANGLE = Math.PI * 0.86
+/** Seconds to get over onto her back. The way back up takes the whole recovery. */
+const ROLL_IN = 0.25
+/** Rig-local height of her spine — the axis she rolls around. */
+const ROLL_PIVOT_Y = -24
+
+const ease = (t: number) => t * t * (3 - 2 * t)
 
 // Skeleton, in rig-local px. Ground is y = 0.
 const HIP = { x: -14, y: -20 }
@@ -78,6 +85,8 @@ interface Leg {
 
 interface Rig {
   root: Container
+  /** Rotates about her spine for the Show Belly roll. */
+  roll: Container
   /** Torso transform — carries the breathing and the walk bob. */
   core: Container
   head: Container
@@ -95,6 +104,8 @@ interface Pose {
   /** 0 relaxed, 1 fully perked. */
   earLift: number
   tailWag: number
+  /** 0 on her feet, 1 fully on her back. */
+  roll: number
 }
 
 /** The torso outline, shared so the belly band can hug its real lower edge. */
@@ -149,6 +160,13 @@ function makeLeg(mode: 'coat' | 'markings', far: boolean, hip: { x: number; y: n
 function createRig(mode: 'coat' | 'markings'): Rig {
   const root = new Container()
   root.scale.set(SCALE)
+
+  // Everything hangs off the roll node, which pivots about her spine so a Show Belly
+  // tips her over in place instead of swinging her around her feet.
+  const roll = new Container()
+  roll.pivot.set(0, ROLL_PIVOT_Y)
+  roll.position.set(0, ROLL_PIVOT_Y)
+  root.addChild(roll)
 
   const core = new Container()
 
@@ -241,14 +259,41 @@ function createRig(mode: 'coat' | 'markings'): Rig {
   }
 
   core.addChild(head)
-  root.addChild(tail, farRear.root, farFront.root, core, nearRear.root, nearFront.root)
+  roll.addChild(tail, farRear.root, farFront.root, core, nearRear.root, nearFront.root)
 
-  return { root, core, head, ear, tail, legs: [farRear, farFront, nearRear, nearFront] }
+  return { root, roll, core, head, ear, tail, legs: [farRear, farFront, nearRear, nearFront] }
 }
 
 /** Applied identically to both rigs, so the coat and the white move as one animal. */
 function poseRig(rig: Rig, p: Pose) {
   rig.root.scale.x = SCALE * p.facing
+
+  // ── Show Belly ───────────────────────────────────────────────────────────
+  // She goes over onto her spine. Rolling toward the camera (positive local
+  // rotation, which the mirrored scale flips with her) is what turns the white
+  // belly upward instead of hiding it behind her.
+  rig.roll.rotation = p.roll * ROLL_ANGLE
+
+  if (p.roll > 0) {
+    // Legs splay and paddle at the air — the whole reason this animation is joyful.
+    const paddle = Math.sin(p.walk * 3.4) * 0.5 * p.roll
+    for (let i = 0; i < rig.legs.length; i++) {
+      const leg = rig.legs[i]
+      leg.root.rotation = (i % 2 === 0 ? -0.7 : -1.1) * p.roll + paddle * (i % 2 ? 1 : -1)
+      leg.knee.rotation = 1.1 * p.roll
+    }
+    // Head lolls back, ear falls away from the skull, tail sweeps the ground.
+    rig.head.rotation = 0.55 * p.roll
+    rig.head.position.set(HEAD_BASE.x, HEAD_BASE.y + 2 * p.roll)
+    rig.ear.rotation = 0.9 * p.roll
+    rig.ear.scale.set(1, 1)
+    rig.tail.rotation = Math.sin(p.walk * 2.2) * 0.5 * p.roll
+    rig.core.position.y = 0
+    rig.core.scale.y = 1
+    return
+  }
+
+  rig.ear.scale.set(1, 1)
 
   const bob = p.moving ? Math.abs(Math.sin(p.walk)) * 1.5 : 0
   rig.core.position.y = -bob
@@ -302,6 +347,29 @@ export class Kara {
    */
   alert = false
 
+  /**
+   * §3.2 Show Belly. 0 while she is on her feet, rising to 1 at the height of the
+   * flash. The game drives her belly light straight off this envelope.
+   */
+  bellyGlow = 0
+
+  /** True while she is down and cannot be commanded. */
+  get busy() {
+    return this.bellyTimer > 0
+  }
+
+  get bellyReady() {
+    return this.bellyCooldown <= 0 && !this.busy
+  }
+
+  get bellyCooldownRemaining() {
+    return Math.max(0, this.bellyCooldown)
+  }
+
+  get bubbleCharges() {
+    return Math.floor(this.charges)
+  }
+
   private target: { x: number; y: number } | null = null
   private facing: 1 | -1 = -1
   private walk = 0
@@ -310,6 +378,12 @@ export class Kara {
   private idleFlick = 0
   private earTimer = 2 + Math.random() * 3
   private tailWag = 0
+  private speed = KARA_WALK_SPEED
+
+  private bellyTimer = 0
+  private bellyCooldown = 0
+  private roll = 0
+  private charges: number = BUBBLES.maxCharges
 
   constructor(x: number, y: number) {
     this.x = x
@@ -319,11 +393,62 @@ export class Kara {
   }
 
   moveTo(x: number, y: number) {
+    if (this.busy) return
     this.target = { x, y }
+    this.speed = KARA_WALK_SPEED
+  }
+
+  /**
+   * She chases a bubble without hesitation — nearly twice her walking speed. This is
+   * her blink, and the reason it costs a charge rather than a cooldown is that the
+   * player should be able to spend both at once when it matters.
+   */
+  chaseBubble(x: number, y: number): boolean {
+    if (this.busy || this.charges < 1) return false
+    this.charges -= 1
+    this.target = { x, y }
+    this.speed = BUBBLES.chaseSpeed
+    return true
+  }
+
+  /** Returns false if she is on cooldown or already down. */
+  showBelly(): boolean {
+    if (!this.bellyReady) return false
+    this.bellyTimer = SHOW_BELLY.flash + SHOW_BELLY.recovery
+    this.bellyCooldown = SHOW_BELLY.cooldown
+    this.target = null
+    return true
   }
 
   update(dt: number, lighting: LightingSystem, threats: Threat[] = []) {
     let moving = false
+
+    this.bellyCooldown = Math.max(0, this.bellyCooldown - dt)
+    this.charges = Math.min(BUBBLES.maxCharges, this.charges + dt / BUBBLES.regen)
+
+    // ── Show Belly envelope ──────────────────────────────────────────────────
+    if (this.bellyTimer > 0) {
+      this.bellyTimer = Math.max(0, this.bellyTimer - dt)
+      const elapsed = SHOW_BELLY.flash + SHOW_BELLY.recovery - this.bellyTimer
+
+      if (elapsed < ROLL_IN) this.roll = ease(elapsed / ROLL_IN)
+      else if (elapsed < SHOW_BELLY.flash) this.roll = 1
+      else this.roll = 1 - ease((elapsed - SHOW_BELLY.flash) / SHOW_BELLY.recovery)
+
+      // Light holds, then eases out over the last 0.4s of the flash — and is gone
+      // before she is back on her feet, so the reward ends before the risk does.
+      const fadeFrom = SHOW_BELLY.flash - 0.4
+      if (elapsed < fadeFrom) this.bellyGlow = this.roll
+      else if (elapsed < SHOW_BELLY.flash) this.bellyGlow = 1 - (elapsed - fadeFrom) / 0.4
+      else this.bellyGlow = 0
+
+      this.walk += dt * 9
+      this.pose(false, lighting)
+      return
+    }
+
+    this.roll = 0
+    this.bellyGlow = 0
 
     if (this.target) {
       const dx = this.target.x - this.x
@@ -332,12 +457,14 @@ export class Kara {
 
       if (dist < 4) {
         this.target = null
+        this.speed = KARA_WALK_SPEED
       } else {
         moving = true
-        this.x += (dx / dist) * WALK_SPEED * dt
-        this.y += (dy / dist) * WALK_SPEED * dt
+        this.x += (dx / dist) * this.speed * dt
+        this.y += (dy / dist) * this.speed * dt
         if (Math.abs(dx) > 1) this.facing = dx > 0 ? 1 : -1
-        this.walk += dt * 9
+        // Chasing a bubble, her legs go over faster than a walk.
+        this.walk += dt * (this.speed > KARA_WALK_SPEED ? 15 : 9)
       }
     }
 
@@ -387,6 +514,10 @@ export class Kara {
     const wagTarget = (moving ? Math.sin(this.walk * 1.4) * 0.5 : wagIdle) * (1 - this.earLift * 0.85)
     this.tailWag += (wagTarget - this.tailWag) * Math.min(1, dt * 10)
 
+    this.pose(moving, lighting)
+  }
+
+  private pose(moving: boolean, lighting: LightingSystem) {
     const pose: Pose = {
       facing: this.facing,
       walk: this.walk,
@@ -394,6 +525,7 @@ export class Kara {
       breath: this.breath,
       earLift: this.earLift,
       tailWag: this.tailWag,
+      roll: this.roll,
     }
     poseRig(this.coatRig, pose)
     poseRig(this.markRig, pose)
@@ -402,8 +534,9 @@ export class Kara {
     this.markings.position.set(this.x, this.y)
 
     // Her white picks up whatever light is nearest and never fully vanishes: in the
-    // dark she is four pale paws and a chest moving through the black.
+    // dark she is four pale paws and a chest moving through the black. On her back it
+    // is fully lit by her own reflection, which is the point of the ability.
     const lit = lighting.lightAt(this.x, this.y)
-    this.markings.alpha = 0.28 + 0.72 * lit
+    this.markings.alpha = Math.max(0.28 + 0.72 * lit, this.roll)
   }
 }

@@ -12,10 +12,42 @@ const CONTROLS = [
   { key: '1 / 2', label: 'Select ward' },
   { key: 'Left click', label: 'Place it' },
   { key: 'Right click', label: 'Send Kara' },
+  { key: 'X', label: 'Show Belly' },
+  { key: 'B', label: 'Bubble at cursor' },
   { key: 'F', label: 'Fast-forward' },
   { key: 'Space', label: 'Pause' },
   { key: '?', label: 'Help' },
 ]
+
+/**
+ * Kara's cooldowns, unlike her Ear-Perk, must be on screen — a resource the player
+ * cannot count is a resource they will not spend.
+ */
+function KaraPanel({ state }: { state: GameState }) {
+  return (
+    <div className="panel kara-panel">
+      <span className="label">Kara</span>
+
+      <div className={`ability ${state.bellyReady ? 'ready' : 'cooling'}`}>
+        <kbd>X</kbd>
+        <span className="ability-name">Show Belly</span>
+        <span className="ability-state">
+          {state.bellyReady ? 'ready' : `${Math.ceil(state.bellyCooldown)}s`}
+        </span>
+      </div>
+
+      <div className={`ability ${state.bubbleCharges > 0 ? 'ready' : 'cooling'}`}>
+        <kbd>B</kbd>
+        <span className="ability-name">Bubbles</span>
+        <span className="pips">
+          {Array.from({ length: state.bubbleMax }, (_, i) => (
+            <span key={i} className={`pip ${i < state.bubbleCharges ? 'full' : ''}`} />
+          ))}
+        </span>
+      </div>
+    </div>
+  )
+}
 
 export interface HudProps {
   state: GameState | null
@@ -83,9 +115,19 @@ function Rules({ state }: { state: GameState }) {
         light adds {OIL_PER_LIT_KILL} more. Anything that reaches the porch pays nothing.
       </li>
       <li>
-        <strong>Kara can't help yet.</strong> Right click walks her anywhere, and she is the one
-        thing the dark does not hide — but her abilities aren't built. For now she just keeps you
-        company.
+        <strong>Kara works in the dark</strong> — the only thing that does. Right click sends her.
+        Watch her ears: she lifts them about two seconds before something becomes visible, and
+        she turns to face it. That tell is the game's radar, and it is the only one you get.
+      </li>
+      <li>
+        <strong>Press X to Show Belly.</strong> She flops onto her back and her white belly
+        throws light across the area — enough to make a whole clump of them killable for a
+        moment, anywhere on the map. She is helpless for two seconds afterward.
+      </li>
+      <li>
+        <strong>Press B to blow a bubble</strong> at your cursor. She chases it at nearly twice
+        her walking speed, and the bubble drifts and glows — enough light to reveal what's out
+        there, never enough to kill it.
       </li>
     </ol>
   )
@@ -184,6 +226,8 @@ export function Hud({
             under cursor {state.lightUnderCursor.toFixed(2)} — {BAND_LABEL[state.bandUnderCursor]}
           </span>
         </div>
+
+        <KaraPanel state={state} />
 
         <div className="panel controls">
           {CONTROLS.map((c) => (
