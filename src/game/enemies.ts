@@ -1,4 +1,4 @@
-import { Graphics } from 'pixi.js'
+import { Container, Graphics } from 'pixi.js'
 import { BAND_DIM, PORCH_DAMAGE, ROAD_WALKER } from './balance'
 import { damageMultiplier } from './lighting'
 import type { LightingSystem } from './lighting'
@@ -17,25 +17,80 @@ export class RoadWalker {
   hp: number = ROAD_WALKER.hp
 
   readonly porchDamage = PORCH_DAMAGE.roadWalker
-  readonly gfx = new Graphics()
+
+  /**
+   * A hunched figure in rags rather than a dot. Everything about it is built to read
+   * at a glance in half-light: a bowed silhouette, a slow sway, and a hem that trails.
+   * It has no face — whatever is under the hood is the player's problem to imagine.
+   */
+  readonly gfx = new Container()
 
   /** Index into ROAD plus the fraction travelled into the current segment. */
   private t = 0
   private wobble = Math.random() * Math.PI * 2
   private path: Vec2[] = ROAD
 
+  private readonly shadow = new Graphics()
+  private readonly frame = new Container()
+  private readonly hem = new Graphics()
+  private readonly armNear = new Container()
+  private readonly armFar = new Container()
+  private gait = Math.random() * Math.PI * 2
+
   constructor() {
     this.x = this.path[0].x
     this.y = this.path[0].y
+    this.draw()
+  }
 
-    const { radius, color } = ROAD_WALKER
-    this.gfx
-      .ellipse(0, radius * 0.5, radius * 0.9, radius * 0.4)
-      .fill({ color: 0x000000, alpha: 0.25 })
-      .circle(0, 0, radius)
-      .fill({ color, alpha: 0.75 })
-      .circle(0, 0, radius * 0.55)
-      .fill({ color: 0xffffff, alpha: 0.12 })
+  private draw() {
+    const { color } = ROAD_WALKER
+    const dark = 0x4d5c68
+    const H = 38
+
+    this.shadow.ellipse(0, 2, 11, 4).fill({ color: 0x000000, alpha: 0.3 })
+
+    // Far arm, behind the body.
+    this.armFar.position.set(-1, -H + 12)
+    this.armFar.addChild(new Graphics().roundRect(-2, 0, 4, 15, 2).fill(dark))
+
+    // Robe: narrow at the shoulders, flaring to a ragged hem.
+    const robe = new Graphics()
+    robe
+      .moveTo(-6, -H + 6)
+      .quadraticCurveTo(-9, -H / 2, -11, -4)
+      .lineTo(11, -4)
+      .quadraticCurveTo(9, -H / 2, 6, -H + 6)
+      .fill({ color, alpha: 0.82 })
+    // Shoulders hunched forward.
+    robe.ellipse(0, -H + 7, 8, 5.5).fill({ color, alpha: 0.9 })
+    // The hood, and the nothing inside it.
+    robe.ellipse(1, -H + 1, 6.5, 7).fill({ color: dark, alpha: 0.95 })
+    robe.ellipse(2, -H + 2, 4.5, 5).fill({ color: 0x101820, alpha: 0.9 })
+
+    // Tattered hem, animated so it drags.
+    this.hem.position.set(0, -4)
+
+    // Near arm, hanging.
+    this.armNear.position.set(3, -H + 12)
+    this.armNear.addChild(new Graphics().roundRect(-2, 0, 4.5, 16, 2).fill({ color, alpha: 0.9 }))
+
+    this.frame.addChild(this.armFar, robe, this.hem, this.armNear)
+    this.gfx.addChild(this.shadow, this.frame)
+  }
+
+  private poseHem(t: number) {
+    this.hem.clear()
+    const { color } = ROAD_WALKER
+    for (let i = 0; i < 5; i++) {
+      const x = -10 + i * 5
+      const sway = Math.sin(t * 2 + i * 0.9) * 1.6
+      this.hem
+        .moveTo(x, 0)
+        .lineTo(x + sway, 4 + (i % 2 ? 3 : 1))
+        .lineTo(x + 4, 0)
+        .fill({ color, alpha: 0.7 })
+    }
   }
 
   get dead() {
@@ -81,11 +136,26 @@ export class RoadWalker {
     this.wobble += dt * 1.7
     this.x += Math.sin(this.wobble) * 9
 
+    // A slow, wrong walk. It sways rather than strides, and never quite finds a rhythm.
+    this.gait += dt * 3.2
+    this.frame.rotation = Math.sin(this.gait) * 0.055
+    this.frame.position.y = Math.abs(Math.sin(this.gait)) * -1.4
+    this.armNear.rotation = Math.sin(this.gait) * 0.35
+    this.armFar.rotation = -Math.sin(this.gait) * 0.3
+    this.poseHem(this.gait)
+
+    // Face the way it is going, without ever turning to look at you.
+    const heading = to.x - from.x
+    if (Math.abs(heading) > 0.5) this.frame.scale.x = heading > 0 ? 1 : -1
+
     // §2.1: in the dark band an enemy is invisible, full stop. This is the rule the
     // whole game is built on, and it has to be literal or none of it lands.
     const L = lighting.lightAt(this.x, this.y)
     this.gfx.alpha = L < BAND_DIM ? 0 : 0.5 + 0.5 * Math.min(1, (L - BAND_DIM) / 0.4)
     this.gfx.position.set(this.x, this.y)
-    this.gfx.scale.set(1 - (1 - this.hp / ROAD_WALKER.hp) * 0.15)
+
+    // Wounded things stoop.
+    const wear = 1 - this.hp / ROAD_WALKER.hp
+    this.frame.scale.y = 1 - wear * 0.12
   }
 }

@@ -9,6 +9,7 @@ import {
   OIL_PER_LIT_KILL,
   WAVE_BREAK,
 } from './balance'
+import { Bloom, Motes, vignette } from './atmosphere'
 import { RoadWalker } from './enemies'
 import { Kara } from './kara'
 import { LightingSystem, bandOf, radiusForThreshold } from './lighting'
@@ -64,6 +65,8 @@ export class Game {
 
   private kara!: Kara
   private smoke!: Smoke
+  private bloom!: Bloom
+  private motes!: Motes
   private walkers: RoadWalker[] = []
   private lanterns: Lantern[] = []
   private preview = new Graphics()
@@ -122,18 +125,27 @@ export class Game {
     // until they pay for it.
     for (const light of built.lights) this.lighting.add(light)
 
-    // Window and lantern glow, above the darkness so the thing you are defending is
-    // always legible — the same reason Kara's white markings live up here.
-    this.foreground.addChild(built.emissive)
+    // Window and lantern glow go through the bloom, so light spills the way light does.
+    this.bloom = new Bloom(WORLD_WIDTH, WORLD_HEIGHT)
+    this.bloom.source.addChild(built.emissive)
 
     this.kara = new Kara(HOMESTEAD.x - 100, HOMESTEAD.y - 20)
     this.scene.addChild(this.kara.body)
-    this.foreground.addChild(this.kara.markings)
+    // Her white is emissive too — it is the one thing the dark must never take.
+    this.bloom.source.addChild(this.kara.markings)
+
+    this.motes = new Motes(WORLD_WIDTH, WORLD_HEIGHT)
 
     // Above the darkness overlay, so the player can see where the pool will land.
-    this.foreground.addChild(this.preview)
+    this.foreground.addChild(this.motes.container, this.preview)
 
-    this.app.stage.addChild(this.scene, this.lighting.overlay, this.foreground)
+    this.app.stage.addChild(
+      this.scene,
+      this.lighting.overlay,
+      this.bloom.output,
+      this.foreground,
+      vignette(WORLD_WIDTH, WORLD_HEIGHT),
+    )
 
     this.bindInput()
     this.app.ticker.add((ticker) => this.tick(Math.min(ticker.deltaMS / 1000, 0.05)))
@@ -297,6 +309,7 @@ export class Game {
     const lantern = new Lantern(x, y, this.lighting)
     this.lanterns.push(lantern)
     this.scene.addChild(lantern.gfx)
+    this.bloom.source.addChild(lantern.emissive)
   }
 
   private queueWave(index: number) {
@@ -312,14 +325,16 @@ export class Game {
   private retryNight() {
     for (const w of this.walkers) {
       this.scene.removeChild(w.gfx)
-      w.gfx.destroy()
+      w.gfx.destroy({ children: true })
     }
     this.walkers = []
 
     for (const l of this.lanterns) {
       this.lighting.remove(l.light)
       this.scene.removeChild(l.gfx)
-      l.gfx.destroy()
+      this.bloom.source.removeChild(l.emissive)
+      l.gfx.destroy({ children: true })
+      l.emissive.destroy({ children: true })
     }
     this.lanterns = []
 
@@ -341,10 +356,11 @@ export class Game {
       this.phase === 'complete'
 
     if (frozen) {
-      // The chimney keeps going. The house is still lived in, even on the pause screen.
+      // The chimney keeps going, and the lamps keep swinging. The house is still lived
+      // in, even on the pause screen.
       this.smoke.update(dt)
-      this.lighting.update(this.app.renderer, dt)
-      this.drawPreview()
+      for (const lantern of this.lanterns) lantern.animate(dt)
+      this.renderPasses(dt)
       this.publish()
       return
     }
@@ -363,7 +379,10 @@ export class Game {
       this.scene.addChild(walker.gfx)
     }
 
-    for (const lantern of this.lanterns) lantern.update(dt, this.walkers, this.lighting)
+    for (const lantern of this.lanterns) {
+      lantern.animate(dt)
+      lantern.update(dt, this.walkers, this.lighting)
+    }
 
     for (const walker of this.walkers) {
       walker.update(dt, this.lighting)
@@ -382,7 +401,7 @@ export class Game {
       }
       if (!walker.arrived) this.oil += OIL_PER_LIT_KILL
       this.scene.removeChild(walker.gfx)
-      walker.gfx.destroy()
+      walker.gfx.destroy({ children: true })
     }
     this.walkers = survivors
 
@@ -401,9 +420,16 @@ export class Game {
 
     this.kara.update(dt, this.lighting)
     this.smoke.update(dt)
-    this.lighting.update(this.app.renderer, dt)
-    this.drawPreview()
+    this.renderPasses(dt)
     this.publish()
+  }
+
+  /** Lightmap, bloom, motes, placement preview — the passes that run every frame. */
+  private renderPasses(dt: number) {
+    this.lighting.update(this.app.renderer, dt)
+    this.motes.update(dt, (x, y) => this.lighting.lightAt(x, y))
+    this.bloom.update(this.app.renderer)
+    this.drawPreview()
   }
 
   private publish() {
@@ -440,6 +466,7 @@ export class Game {
     // Still initializing — mount() sees `disposed` when it resumes and cleans up there.
     if (!this.ready) return
 
+    this.bloom.destroy()
     this.lighting.destroy()
     this.app.destroy(true, { children: true })
   }
