@@ -74,6 +74,17 @@ export class Game {
   private stateHandler: ((s: GameState) => void) | null = null
   private detach: (() => void)[] = []
 
+  /** Set once mount() has finished; until then there is nothing safe to tear down. */
+  private ready = false
+  private disposed = false
+
+  /**
+   * React StrictMode mounts the effect, tears it down, and mounts it again. Because
+   * this is async, the teardown lands while `app.init()` is still in flight — and
+   * calling `destroy()` on a half-initialized Pixi Application throws, which takes the
+   * whole React tree down with it. So init has to check whether it was abandoned while
+   * it was awaiting, and destroy() has to keep its hands off an app that never inited.
+   */
   async mount(host: HTMLElement) {
     await this.app.init({
       width: WORLD_WIDTH,
@@ -83,6 +94,12 @@ export class Game {
       resolution: Math.min(window.devicePixelRatio, 2),
       autoDensity: true,
     })
+
+    if (this.disposed) {
+      this.app.destroy(true, { children: true })
+      return
+    }
+
     host.appendChild(this.app.canvas)
 
     this.lighting = new LightingSystem(WORLD_WIDTH, WORLD_HEIGHT)
@@ -110,6 +127,8 @@ export class Game {
 
     this.bindInput()
     this.app.ticker.add((ticker) => this.tick(Math.min(ticker.deltaMS / 1000, 0.05)))
+
+    this.ready = true
   }
 
   onState(handler: (s: GameState) => void) {
@@ -331,9 +350,15 @@ export class Game {
   }
 
   destroy() {
+    this.disposed = true
+
     for (const off of this.detach) off()
     this.detach = []
-    this.lighting?.destroy()
+
+    // Still initializing — mount() sees `disposed` when it resumes and cleans up there.
+    if (!this.ready) return
+
+    this.lighting.destroy()
     this.app.destroy(true, { children: true })
   }
 }

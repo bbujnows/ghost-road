@@ -107,3 +107,8 @@ native binary downloaded corrupt. Fix with `npm install lightningcss-win32-x64-m
 
 - `erasableSyntaxOnly` is on in the TS config, so **constructor parameter properties do not
   compile**. Declare fields explicitly and assign in the constructor.
+- **React StrictMode double-mounts effects**, so `Game.destroy()` can fire while `app.init()` is
+  still awaiting. Destroying a half-initialized Pixi Application throws `_cancelResize is not a
+  function` and takes the whole React tree down with it — the symptom is a blank page, not a
+  visible error. `Game` guards this with `ready`/`disposed` flags; any new async setup in `mount()`
+  has to stay behind the same guard.
