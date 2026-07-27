@@ -158,6 +158,16 @@ nearest threat within radius, 2.0s before it becomes visible. From **Night 5**, 
 a false positive with nothing behind it — she is reacting to something the player will never see.
 This is a horror beat and a deliberate erosion of the player's most reliable instrument.
 
+**Implementation note, and it matters.** She perks at what is *about to be seen*, not at whatever
+happens to be nearby. Each threat's position is projected 2.0s along the road and tested against
+the lightmap; she reacts only to threats that are currently invisible and will be visible by then.
+Tying it to raw proximity instead would leave her ears up for nine seconds at a stretch — at 280px
+and 30px/s that is most of the approach — and the tell would mean nothing. **The signal is only
+worth watching because it is rare.**
+
+The perk snaps up fast and comes down slowly, breathing shallows, and the tail stops wagging. None
+of it is surfaced in the HUD, deliberately: the player is meant to learn to watch her.
+
 ### 3.3 The hose lock
 
 While Kara is within `0.5 × barrier radius` of an active spring line she enters **Play**:
@@ -282,13 +292,37 @@ Only the Road Walker is specified so far; the rest get numbers as they are built
 
 | Enemy | HP | Speed | Porch damage |
 | --- | --- | --- | --- |
-| **Road Walker** | 60 | 30 px/s | 8 |
+| **Road Walker** | 120 | 30 px/s | 8 |
 
 The Road Walker's numbers are derived rather than picked. A lantern does `14 / 0.55 ≈ 25.5` dps,
 and a walker crossing a lantern's 154px Lit chord at 30 px/s is exposed for **5.1 seconds**, taking
-**130 damage**. At 60 HP that is comfortably two walkers killed per lantern per pass — so a single
-lantern handles a trickle and is overwhelmed by a group, which is the entire Night 1 lesson. Tune
-by moving HP against that 130, not in isolation.
+**130 damage**. At 120 HP that is **one pass, one kill, with almost no margin.**
+
+> **This was 60, and it broke the game.** At 60 a single lantern overkilled by 2×, so two
+> overlapping lanterns killed a walker in **1.15 seconds** — fast enough that it read as the enemy
+> vanishing on contact. Worse, the Bright band's +25% never mattered, because nothing lived long
+> enough to benefit from it. Overlapping was strictly better than spreading and the central
+> decision of the game — coverage versus damage — did not exist. Tune HP against that 130, never
+> in isolation.
+
+Measured kill times at 120 HP, walking straight through lantern coverage:
+
+| Placement | Time to kill | What it buys |
+| --- | --- | --- |
+| One lantern | 3.98s (4.3s dwell) | Only just enough. Off-centre placement will fail to kill. |
+| Two overlapping, 90px apart | 2.27s | Fast kills over a short stretch |
+| Two spread, 220px apart | 3.98s | Same kill speed, twice the road covered |
+
+That gap is the game: **overlap to kill faster, spread to cover more road**, and neither is free.
+
+**Lanterns re-arm on acquisition.** A lantern's cooldown is clamped at zero and reset to
+`initialDelay = 0.3s` the moment it acquires a target. Without this, an idle lantern banks
+readiness and fires the instant anything crosses into its light — two overlapping lanterns landed
+35 damage on the same frame, 29% of a walker's health, before the player saw anything happen.
+
+**Nothing may blink out of existence.** A killed walker hands its display container to a corpse
+and falls from the pose it died in over `0.85s` — buckle, topple, fade. A kill the player cannot
+watch happen reads as a bug.
 
 **Night 1 pacing**, at the road's measured 1070px (35.7s traverse):
 

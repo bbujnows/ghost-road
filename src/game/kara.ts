@@ -1,5 +1,19 @@
 import { Container, Graphics } from 'pixi.js'
+import { EAR_PERK_RADIUS } from './balance'
 import type { LightingSystem } from './lighting'
+
+/**
+ * What Kara can hear. The caller works out visibility, because that depends on the
+ * lightmap; she only needs to know what is out there and what is about to be seen.
+ */
+export interface Threat {
+  x: number
+  y: number
+  /** Currently in the dim band or brighter — the player can already see it. */
+  visible: boolean
+  /** Will be visible in EAR_PERK_LEAD seconds. This is what she tells you about. */
+  soonVisible: boolean
+}
 
 /**
  * Kara.
@@ -238,12 +252,22 @@ function poseRig(rig: Rig, p: Pose) {
 
   const bob = p.moving ? Math.abs(Math.sin(p.walk)) * 1.5 : 0
   rig.core.position.y = -bob
-  rig.core.scale.y = p.moving ? 1 : 1 + Math.sin(p.breath) * 0.018
+  // Breathing shallows out when she is listening. A still dog is a worried dog.
+  rig.core.scale.y = p.moving ? 1 : 1 + Math.sin(p.breath) * 0.018 * (1 - p.earLift * 0.7)
 
-  rig.head.rotation = p.moving ? Math.sin(p.walk * 2) * 0.05 : Math.sin(p.breath * 0.7) * 0.03
-  rig.head.position.y = HEAD_BASE.y + (p.moving ? Math.sin(p.walk * 2 + 1) * 0.7 : 0) - p.earLift * 1.6
+  // Listening: the head comes up and levels off, and the whole body goes still.
+  rig.head.rotation =
+    (p.moving ? Math.sin(p.walk * 2) * 0.05 : Math.sin(p.breath * 0.7) * 0.03) * (1 - p.earLift) -
+    p.earLift * 0.1
+  rig.head.position.y =
+    HEAD_BASE.y + (p.moving ? Math.sin(p.walk * 2 + 1) * 0.7 : 0) - p.earLift * 2.6
+  rig.head.position.x = HEAD_BASE.x + p.earLift * 1.2
 
-  rig.ear.rotation = -p.earLift * 0.5 + (p.moving ? Math.sin(p.walk * 2) * 0.14 : 0)
+  // The ear is the tell. Floppy at rest, and on a perk it swings up and back and
+  // stiffens — a floppy-eared dog cannot prick its ears, it lifts them at the base.
+  rig.ear.rotation = -p.earLift * 0.95 + (p.moving ? Math.sin(p.walk * 2) * 0.14 : 0) * (1 - p.earLift * 0.7)
+  rig.ear.scale.set(1 + p.earLift * 0.08, 1 - p.earLift * 0.16)
+
   rig.tail.rotation = p.tailWag
 
   // Diagonal gait: each leg a half cycle out of phase with its diagonal partner.
@@ -271,11 +295,19 @@ export class Kara {
   private coatRig = createRig('coat')
   private markRig = createRig('markings')
 
+  /**
+   * §3.2 Ear-Perk. True while she is telling the player about something they cannot
+   * see yet. This is the game's primary tell, and it is deliberately not surfaced in
+   * the HUD — the player is meant to learn to watch her ears instead of the road.
+   */
+  alert = false
+
   private target: { x: number; y: number } | null = null
   private facing: 1 | -1 = -1
   private walk = 0
   private breath = Math.random() * Math.PI * 2
   private earLift = 0
+  private idleFlick = 0
   private earTimer = 2 + Math.random() * 3
   private tailWag = 0
 
@@ -290,7 +322,7 @@ export class Kara {
     this.target = { x, y }
   }
 
-  update(dt: number, lighting: LightingSystem) {
+  update(dt: number, lighting: LightingSystem, threats: Threat[] = []) {
     let moving = false
 
     if (this.target) {
@@ -311,16 +343,48 @@ export class Kara {
 
     this.breath += dt * 1.6
 
-    // Idle ear flicks — a dog is never completely still. Stands in for Ear-Perk,
-    // which is a real detection mechanic and is not built yet.
+    // ── Ear-Perk (§3.2) ──────────────────────────────────────────────────────
+    //
+    // She perks at what is about to be seen, not at whatever happens to be nearby.
+    // Tying the tell to impending visibility rather than raw proximity is what keeps
+    // it meaningful: at 280px and 30px/s, "anything within earshot" would leave her
+    // ears up for nine seconds at a stretch and the signal would mean nothing.
+    let listening: Threat | null = null
+    let nearest = Infinity
+
+    for (const t of threats) {
+      const d = Math.hypot(t.x - this.x, t.y - this.y)
+      if (d > EAR_PERK_RADIUS || d >= nearest) continue
+      if (t.visible || !t.soonVisible) continue
+      nearest = d
+      listening = t
+    }
+
+    this.alert = listening !== null
+
+    // Idle flicks, so she is never completely still when nothing is coming.
     this.earTimer -= dt
     if (this.earTimer <= 0) {
       this.earTimer = 2.5 + Math.random() * 4
-      this.earLift = 1
+      this.idleFlick = 1
     }
-    this.earLift = Math.max(0, this.earLift - dt * 3)
+    this.idleFlick = Math.max(0, this.idleFlick - dt * 3)
 
-    const wagTarget = moving ? Math.sin(this.walk * 1.4) * 0.5 : Math.sin(this.breath * 0.9) * 0.12
+    // A perk snaps up fast and comes down slowly — the shape of actually hearing
+    // something. An idle flick is a much smaller, quicker motion.
+    const earTarget = this.alert ? 1 : this.idleFlick * 0.45
+    const rate = earTarget > this.earLift ? 11 : 2.4
+    this.earLift += (earTarget - this.earLift) * Math.min(1, dt * rate)
+
+    // She turns to look at it, but only when she is not already going somewhere.
+    if (listening && !moving) {
+      const dx = listening.x - this.x
+      if (Math.abs(dx) > 6) this.facing = dx > 0 ? 1 : -1
+    }
+
+    // A dog that has heard something stops wagging.
+    const wagIdle = Math.sin(this.breath * 0.9) * 0.12
+    const wagTarget = (moving ? Math.sin(this.walk * 1.4) * 0.5 : wagIdle) * (1 - this.earLift * 0.85)
     this.tailWag += (wagTarget - this.tailWag) * Math.min(1, dt * 10)
 
     const pose: Pose = {

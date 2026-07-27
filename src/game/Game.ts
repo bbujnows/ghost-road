@@ -2,6 +2,7 @@ import { Application, Container, Graphics } from 'pixi.js'
 import {
   BAND_DIM,
   BAND_LIT,
+  EAR_PERK_LEAD,
   HOMESTEAD_MAX_HP,
   LANTERN,
   NIGHT_1_STARTING_OIL,
@@ -10,8 +11,9 @@ import {
   WAVE_BREAK,
 } from './balance'
 import { Bloom, Motes, vignette } from './atmosphere'
-import { RoadWalker } from './enemies'
+import { Corpse, RoadWalker } from './enemies'
 import { Kara } from './kara'
+import type { Threat } from './kara'
 import { LightingSystem, bandOf, radiusForThreshold } from './lighting'
 import type { Band } from './lighting'
 import { Lantern } from './wards'
@@ -68,6 +70,7 @@ export class Game {
   private bloom!: Bloom
   private motes!: Motes
   private walkers: RoadWalker[] = []
+  private corpses: Corpse[] = []
   private lanterns: Lantern[] = []
   private preview = new Graphics()
 
@@ -331,6 +334,12 @@ export class Game {
     }
     this.walkers = []
 
+    for (const c of this.corpses) {
+      this.scene.removeChild(c.gfx)
+      c.gfx.destroy({ children: true })
+    }
+    this.corpses = []
+
     for (const l of this.lanterns) {
       this.lighting.remove(l.light)
       this.scene.removeChild(l.gfx)
@@ -395,17 +404,30 @@ export class Game {
     }
 
     // Cleanup. Oil is only awarded for kills, not for walkers that reached the porch.
+    // A killed walker hands its container to a Corpse and falls; one that reached the
+    // porch is simply gone, because it walked inside.
     const survivors: RoadWalker[] = []
     for (const walker of this.walkers) {
       if (!walker.dead) {
         survivors.push(walker)
         continue
       }
-      if (!walker.arrived) this.oil += OIL_PER_LIT_KILL
-      this.scene.removeChild(walker.gfx)
-      walker.gfx.destroy({ children: true })
+      if (walker.arrived) {
+        this.scene.removeChild(walker.gfx)
+        walker.gfx.destroy({ children: true })
+      } else {
+        this.oil += OIL_PER_LIT_KILL
+        this.corpses.push(new Corpse(walker.gfx))
+      }
     }
     this.walkers = survivors
+
+    for (const corpse of this.corpses) corpse.update(dt)
+    for (const corpse of this.corpses.filter((c) => c.finished)) {
+      this.scene.removeChild(corpse.gfx)
+      corpse.gfx.destroy({ children: true })
+    }
+    this.corpses = this.corpses.filter((c) => !c.finished)
 
     if (this.homesteadHp <= 0) {
       this.homesteadHp = 0
@@ -420,7 +442,20 @@ export class Game {
       }
     }
 
-    this.kara.update(dt, this.lighting)
+    // What Kara can hear. `soonVisible` asks where each walker will be in
+    // EAR_PERK_LEAD seconds and whether the light will have reached it by then — that
+    // lookahead is the whole reason her ears mean anything.
+    const threats: Threat[] = this.walkers.map((w) => {
+      const ahead = w.futurePosition(EAR_PERK_LEAD)
+      return {
+        x: w.x,
+        y: w.y,
+        visible: this.lighting.lightAt(w.x, w.y) >= BAND_DIM,
+        soonVisible: this.lighting.lightAt(ahead.x, ahead.y) >= BAND_DIM,
+      }
+    })
+
+    this.kara.update(dt, this.lighting, threats)
     this.smoke.update(dt)
     this.renderPasses(dt)
     this.publish()

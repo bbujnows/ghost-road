@@ -21,7 +21,9 @@ export class Lantern {
   readonly x: number
   readonly y: number
 
-  private cooldown = 0
+  // Never fires the instant a target lights up. See LANTERN.initialDelay.
+  private cooldown: number = LANTERN.initialDelay
+  private hadTarget = false
   private housing = new Container()
   private flame = new Graphics()
   private sway = Math.random() * Math.PI * 2
@@ -78,12 +80,12 @@ export class Lantern {
     this.flame.position.x = Math.sin(this.sway) * 1.2
   }
 
-  /** Returns the damage dealt this tick, so the caller can award oil on a kill. */
   update(dt: number, walkers: RoadWalker[], lighting: LightingSystem) {
-    this.cooldown -= dt
-    if (this.cooldown > 0) return
+    // Clamped at zero. Left to run negative while idle, the lantern banks readiness
+    // and lands a free shot the instant anything crosses into its light.
+    this.cooldown = Math.max(0, this.cooldown - dt)
 
-    // Fire on the target furthest along the road that is actually damageable.
+    // Fire on the nearest target that is actually damageable.
     let best: RoadWalker | null = null
     let bestDist = Infinity
 
@@ -97,7 +99,19 @@ export class Lantern {
       }
     }
 
-    if (!best) return
+    // Re-arming on acquisition is what actually stops the alpha strike: two
+    // overlapping lanterns can no longer both fire on the frame a walker lights up.
+    if (!best) {
+      this.hadTarget = false
+      return
+    }
+    if (!this.hadTarget) {
+      this.hadTarget = true
+      this.cooldown = Math.max(this.cooldown, LANTERN.initialDelay)
+      return
+    }
+
+    if (this.cooldown > 0) return
 
     best.applyDamage(LANTERN.damage, lighting)
     this.cooldown = LANTERN.fireInterval

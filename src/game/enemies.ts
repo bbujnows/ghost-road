@@ -105,6 +105,36 @@ export class RoadWalker {
   }
 
   /**
+   * Where it will be after `seconds` of walking, following the road rather than a
+   * straight line. Kara's Ear-Perk needs this: she tells the player about a threat
+   * before it becomes visible, which means asking where it is about to be.
+   */
+  futurePosition(seconds: number): Vec2 {
+    let t = this.t
+    let remaining = ROAD_WALKER.speed * seconds
+
+    while (remaining > 0 && t < this.path.length - 1) {
+      const seg = Math.min(Math.floor(t), this.path.length - 2)
+      const from = this.path[seg]
+      const to = this.path[seg + 1]
+      const segLength = Math.hypot(to.x - from.x, to.y - from.y) || 1
+      const frac = t - seg
+      const left = segLength * (1 - frac)
+
+      if (remaining < left) {
+        const f = frac + remaining / segLength
+        return { x: from.x + (to.x - from.x) * f, y: from.y + (to.y - from.y) * f }
+      }
+
+      remaining -= left
+      t = seg + 1
+    }
+
+    const end = this.path[this.path.length - 1]
+    return { x: end.x, y: end.y }
+  }
+
+  /**
    * §2.1: wards cannot hurt what is standing in the dark, and the bright band pays a
    * bonus. Returns the damage actually dealt, which is zero below the lit threshold.
    */
@@ -159,5 +189,39 @@ export class RoadWalker {
     // Wounded things stoop.
     const wear = 1 - this.hp / ROAD_WALKER.hp
     this.frame.scale.y = 1 - wear * 0.12
+  }
+}
+
+/**
+ * What is left when a walker goes down.
+ *
+ * It inherits the walker's own display container, so it falls from exactly the pose it
+ * died in. Nothing should ever blink out of existence — a kill the player cannot see
+ * happen reads as a bug, which is precisely how it read on the first build.
+ */
+export class Corpse {
+  readonly gfx: Container
+  private t = 0
+  private startAlpha: number
+
+  constructor(gfx: Container) {
+    this.gfx = gfx
+    this.startAlpha = gfx.alpha
+  }
+
+  get finished() {
+    return this.t >= ROAD_WALKER.deathDuration
+  }
+
+  update(dt: number) {
+    this.t = Math.min(ROAD_WALKER.deathDuration, this.t + dt)
+    const k = this.t / ROAD_WALKER.deathDuration
+
+    // Buckles first, then goes over. Ease-out so the fall has some weight to it.
+    const fall = 1 - Math.pow(1 - k, 2.2)
+    this.gfx.rotation = fall * 1.25
+    this.gfx.scale.set(1, 1 - fall * 0.45)
+    // Holds its shape for a beat, then goes to nothing.
+    this.gfx.alpha = this.startAlpha * (k < 0.3 ? 1 : Math.max(0, 1 - (k - 0.3) / 0.7))
   }
 }

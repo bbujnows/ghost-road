@@ -34,6 +34,12 @@ export const LANTERN = {
   fireInterval: 0.55,
   color: 0xffc078,
   flicker: 0.06,
+  /**
+   * A lantern cannot fire the instant something becomes damageable. Without this,
+   * two overlapping lanterns land 35 damage in a single frame the moment a walker
+   * crosses into the light — 58% of its health before the player sees it happen.
+   */
+  initialDelay: 0.3,
   /** Not from the doc: overlap is the point, exact stacking is degenerate. */
   minSpacing: 50,
 } as const
@@ -55,19 +61,30 @@ export const NIGHT_1_STARTING_OIL = 90
 // ─── §6 Enemy roster ────────────────────────────────────────────────────────
 
 /**
- * Road Walker HP and speed were not in the doc; derived and added to it in v1.2.
+ * A lantern does 14 / 0.55s ≈ 25.5 dps and a walker is exposed for 5.1s crossing one
+ * lantern's 154px Lit chord, so a single lantern deals ~130 damage per pass.
  *
- * A lantern does 14 / 0.55s ≈ 25.5 dps. 60 HP means a single lantern needs ~2.4s
- * on a walker, and the walker crosses one 150px lantern pool in ~10s at 30 px/s —
- * so one lantern comfortably handles a trickle and is overwhelmed by a group.
- * That ratio is the whole tuning target for Night 1.
+ * 120 HP makes that **one pass, one kill, with almost no margin** — which is the
+ * number that makes the lighting puzzle exist. At the original 60 the pass overkilled
+ * by 2x, so two overlapping lanterns killed in half a second and the Bright band bonus
+ * never mattered: overlapping was strictly better than spreading, and the central
+ * decision of the game collapsed.
  */
 export const ROAD_WALKER = {
-  hp: 60,
+  hp: 120,
   speed: 30,
   radius: 9,
   color: 0x8fa9b8,
+  /** Seconds the body takes to fall and fade. Purely presentation. */
+  deathDuration: 0.85,
 } as const
+
+// ─── §3 Kara ────────────────────────────────────────────────────────────────
+
+/** §3.1. Rises to 350 at Bond T1, which is not built yet. */
+export const EAR_PERK_RADIUS = 280
+/** §3.2. She tells you this long before the threat becomes visible. */
+export const EAR_PERK_LEAD = 2.0
 
 // ─── §6 / §11 Night pacing ──────────────────────────────────────────────────
 
