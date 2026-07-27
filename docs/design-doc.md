@@ -133,7 +133,7 @@ enough — do not add a permadeath mode.
 | **Lead** | `L` | Once per night | Unlocked at Bond T5, usable Night 7 only. Fog → 0 within 300px of her for 12s. |
 
 **The Bark is not a command.** It fires automatically, at most once per night, when something
-physically reaches the homestead. See §8.
+physically reaches the homestead. See §10.
 
 **Ear-Perk is not a command either.** It is a readout. She lifts her ears and orients toward the
 nearest threat within radius, 2.0s before it becomes visible. From **Night 5**, one perk in six is
@@ -187,7 +187,7 @@ fair.
 
 ## 4. Toy loadout
 
-One toy per night, chosen before the night starts. Toys are unlocked with stash (§7) and persist —
+One toy per night, chosen before the night starts. Toys are unlocked with stash (§9) and persist —
 choosing is a per-night build decision, not a purchase.
 
 | Toy | Effect | Stash cost |
@@ -274,7 +274,91 @@ find the real Kara in about a second and a half, and will feel clever rather tha
 
 ---
 
-## 7. The ball stash economy
+## 7. Difficulty and failure
+
+The homestead has **100 HP**. Enemies that reach the porch damage it and are removed.
+
+| Enemy | Porch damage |
+| --- | --- |
+| Snake-Doctor Swarm | 3 |
+| Tallow Man, Bone Dog | 6 |
+| Road Walker, Hant Cat | 8 |
+| The Unseen | 10 |
+| Drownd Girl | 12 |
+| Boss | 25 |
+
+Two modes, chosen at campaign start and locked for the run.
+
+### 7.1 Normal — *Hold the Night*
+
+- Homestead HP **resets to 100 at the start of every night.**
+- At 0 HP the night ends in failure and is **replayed from wave 1**.
+- **Stash and bond earned during the failed night are kept.** Only the "finished uninjured" +8
+  bond bonus is forfeited.
+- No cap on retries.
+
+The intent is that a bad night costs four minutes and teaches you the lane you misjudged. This is
+the mode for playing at a desk with interruptions.
+
+### 7.2 Hard — *The Hollow Remembers*
+
+- Homestead HP **persists across all seven nights.** It does not reset.
+- Between nights it recovers **+20 HP** free, and stash can buy repairs at **10 stash → +15 HP**.
+- **The homestead never "falls" and the run never restarts.** At 0 HP it takes a **scar**: a
+  permanent, named injury. HP then refills to a new, lower maximum and the night continues.
+
+| Scar | Max HP after | Permanent effect |
+| --- | --- | --- |
+| 1. **Burnt wing** | 85 | −1 ward slot for the rest of the run |
+| 2. **Broken porch** | 70 | Kara's Down recovery 25s → 40s |
+| 3. **Cracked bell frame** | 55 | Church bell cooldown 45s → 70s |
+| 4. **Split spring box** | 40 | Hose amplification halved (+35% radius → +17%) |
+| 5. **Roof gone** | 25 | Rain and fog nights lose an additional 15% light |
+| 6. **—** | — | The hollow takes the homestead. Run over. |
+
+Scars cannot be repaired at any price. Every one of them makes the remaining nights harder in a
+way the player can name, and by Night 7 a scarred run is a genuinely different game — fewer wards,
+a slower dog, a weaker bell. Losing compounds rather than resetting, which is the whole point of
+the mode.
+
+Bond, toys, and permanent unlocks carry across both modes identically. Difficulty changes what
+failure costs, never what Kara is capable of.
+
+---
+
+## 8. The long nights — endless mode
+
+Unlocked by completing Night 7 on either difficulty. Nights 8 onward, procedurally escalating,
+played for a high-water mark. This is the mode that turns 35 minutes of authored content into
+something worth opening every day.
+
+Carried in: **bond, toys, and all permanent unlocks.** Stash keeps accruing and keeps being
+spendable between nights.
+
+**Escalation, where `n` is the night number:**
+
+| Knob | Formula | Notes |
+| --- | --- | --- |
+| Fog density | `min(0.95, 0.50 + 0.05 × (n − 7))` | Hits maximum around Night 16 and stays there. |
+| Enemy HP | `× (1 + 0.12 × (n − 7))` | Uncapped. This is the primary wall. |
+| Enemy speed | `× min(1.5, 1 + 0.03 × (n − 7))` | Capped, so the game never becomes reaction-time-only. |
+| Waves per night | 3, → 4 at Night 12, → 5 at Night 20 | Nights get longer, but 5 waves still lands near 6 minutes. |
+| Starting oil | `120 + 10 × floor((n − 7) / 5)` | Grows, but far slower than enemy HP. |
+
+**Bosses** return every third night (10, 13, 16, …), drawn from the seven with a stacking
+modifier — a Tallow Man that also leaps salt, a Drownd Girl in absolute fog. Boss selection is
+seeded from the run, not random per night, so a run has a recognizable shape.
+
+**Homestead rules follow the difficulty the campaign was cleared on** — Normal replays the night,
+Hard accumulates scars until the sixth ends the run. A Hard endless run therefore has a definite
+ending, which is what makes the score mean something.
+
+**Score** is nights survived, with total bond as the tiebreak. Stored locally. Kara's condition at
+the end of the run is shown alongside the number.
+
+---
+
+## 9. The ball stash economy
 
 Two currencies, deliberately separated so that in-night tactics and between-night progression never
 compete for the same pool.
@@ -307,7 +391,7 @@ build.
 
 ---
 
-## 8. Audio
+## 10. Audio
 
 The audio design exists to serve one event. Everything else is subordinate to it.
 
@@ -340,9 +424,12 @@ nights of a silent dog is what buys those four hundred milliseconds.
 
 ---
 
-## 9. Session and technical constraints
+## 11. Session and technical constraints
 
-- **≤5 minutes per night.** 3 waves × 55–70s + 12s gaps = 3:45–4:30, leaving headroom.
+- **≤5 minutes per night.** 3 waves × 55–70s + 12s gaps = 3:45–4:30, leaving headroom. The one
+  exception is deep endless: 5-wave nights from Night 20 land near 6 minutes. Acceptable there,
+  because by then the player has opted in — but it means **no night may ever require more than one
+  uninterrupted sitting**, and the pause-and-resume path has to be exercised at that length.
 - **Pause is instant and total** (Space). Auto-pause on tab blur. Save to `localStorage` after every
   wave; resume exactly where it left off.
 - **Silent by default** — audio must be explicitly enabled. It is a game played at a desk.
@@ -352,25 +439,45 @@ nights of a silent dog is what buys those four hundred milliseconds.
 
 ---
 
-## 10. Open questions
+## 12. Decisions and open questions
 
-1. **Does the Fetch need an audio tell?** Her collar tags would give the copies away instantly, and
-   silent copies contradict "Kara is always audible." Current lean: the copies jingle too, but
-   fractionally out of sync. Needs playtesting more than argument.
-2. **Is the bell's 5s ear-deafening too punishing at 65 oil?** It may make the bell a trap purchase
-   rather than a tradeoff. Watch whether players buy it twice across a campaign.
-3. **Should fetching default to on or off?** On teaches the tradeoff by making the player feel her
-   absence. Off risks them never discovering the toggle.
-4. **Night 5's boss.** The Greenbrier Ghost is real West Virginia folklore (Zona Heaster Shue, 1897)
-   and is settler history rather than sacred tradition, which is why it is used here. Several
-   obvious alternatives for this slot — the Raven Mocker and the Wampus Cat among them — are
-   Cherokee, drawn from living religious tradition rather than ghost stories. If the game reaches
-   for those, it should be with Cherokee consultation rather than a folklore wiki. Flagged here so
-   the decision is made deliberately rather than by whoever writes Night 5.
+### 12.1 Resolved
+
+**Failure and difficulty.** Two modes, §7. Normal replays the failed night and keeps everything
+earned; Hard persists homestead damage and accumulates permanent scars. Settled 2026-07-27.
+
+**Life after Night 7.** Endless mode, §8, carrying bond and toys forward. Settled 2026-07-27.
+
+**The Fetch's audio tell.** The copies **do** jingle — but a few milliseconds out of sync with the
+real Kara, and very slightly wrong in pitch. Audio is a second and harder confirmation of what her
+white paws already told the player, and "Kara is always audible" survives intact. Implementation
+note: the offset must be small enough that it reads as *unease* rather than as an obvious tell —
+start at 40ms and −15 cents and tune down, not up. Settled 2026-07-27.
+
+**The church bell.** Ships as specced: 65 oil, full 5-second Ear-Perk blackout. It is the best
+anti-synergy in the design and the kind of thing that only proves unfair once a night has actually
+been played with it. Revisit after playtest, not before.
+
+### 12.2 Still open
+
+1. **Should Kara's fetching default to on or off?** On teaches the tradeoff by making the player
+   feel her absence; off risks them never finding the toggle. Leaning on, with the toggle
+   surfaced explicitly the first time she leaves position mid-wave.
+2. **Does Hard mode need a scar preview?** Showing the player which scar is next may create useful
+   dread, or may just make the mode feel scripted. Cheap to try both.
+3. **Endless boss modifiers need a blocklist.** Some stacks are likely unwinnable rather than
+   hard — a salt-leaping, lantern-snuffing boss in 0.95 fog has no counterplay left. Enumerate
+   after the first playable endless run.
+4. **Night 5's boss.** The Greenbrier Ghost is real West Virginia folklore (Zona Heaster Shue,
+   1897) and is settler history rather than sacred tradition, which is why it is used here.
+   Several obvious alternatives for this slot — the Raven Mocker and the Wampus Cat among them —
+   are Cherokee, drawn from living religious tradition rather than ghost stories. If the game
+   reaches for those, it should be with Cherokee consultation rather than a folklore wiki. Flagged
+   here so the decision is made deliberately rather than by whoever writes Night 5.
 
 ---
 
-## 11. What to build first
+## 13. What to build first
 
 In order, because each step is only testable once the prior one works:
 
@@ -383,4 +490,8 @@ In order, because each step is only testable once the prior one works:
 4. **The spring line and its scattering.** The first real combo, and the first thing that will need
    heavy tuning.
 5. **One full night, end to end,** with the bark. Ship nothing else until the bark lands.
-6. Everything else.
+6. **The seven nights and the two difficulty modes.** Normal first — Hard's scar system only makes
+   sense once the nights it degrades actually exist.
+7. **Endless.** Last, deliberately. Its escalation curve can only be tuned against a campaign that
+   has already been balanced, and building it earlier would mean tuning it twice.
+8. Everything else.

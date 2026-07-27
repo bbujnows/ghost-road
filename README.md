@@ -16,7 +16,7 @@ Kara's full command set, the toy loadout, the wards and their synergies, seven n
 the stash economy, and the audio design. The brief it came from is
 [docs/design-prompt.md](docs/design-prompt.md).
 
-Build order is §11 of the design doc. See [CLAUDE.md](CLAUDE.md) before adding anything.
+Build order is §13 of the design doc. See [CLAUDE.md](CLAUDE.md) before adding anything.
 
 ## Run it
 

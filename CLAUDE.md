@@ -11,14 +11,15 @@ demonstrates the lightmap. **There is no gameplay in it yet.**
 
 **[docs/design-doc.md](docs/design-doc.md) is the source of truth for everything else** — the
 light bands, Kara's commands and cooldowns, the toy list, the wards, the seven nights and their
-bosses, the stash economy, and the audio design. It has numbers. Build against them and change
-them by editing that document, not by inventing alternatives in code.
+bosses, the two difficulty modes, endless mode, the stash economy, and the audio design. It has
+numbers. Build against them and change them by editing that document, not by inventing
+alternatives in code.
 
 > An earlier pass at this repo made up an enemy roster, ward costs, damage numbers, and a night
 > structure *before* the design existed, and all of it was thrown away. If something is not in
 > the design doc, it has not been decided — ask rather than invent.
 
-The build order is in §11 of the design doc. Next step is a lantern and a Road Walker.
+The build order is in §13 of the design doc. Next step is a lantern and a Road Walker.
 
 ## The two rules everything will hang off
 
