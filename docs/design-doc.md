@@ -310,6 +310,46 @@ choosing is a per-night build decision, not a purchase.
 The Blanket Scrap is the ambush enabler and is priced to be a late-campaign pickup. The Weighted
 Bear is deliberately double-edged — more body, less reach.
 
+### 4.1 As built (2026-07-28)
+
+**Four of the eight ship. The other four are blocked, not cut**, and every one is blocked on a
+system that does not exist:
+
+| Toy | Blocked on |
+| --- | --- |
+| Ragged Fox | bond (§3.4) |
+| Tennis Ball | the ball drop (§3.5) and stash (§9) |
+| The Squeaker | the bark (§10). Its other half is `+0.2s` on one number — nobody would ever pick it. |
+| Stuffed Duck | the spring line (§3.3) |
+
+Shipping a toy whose effect is inert is worse than shipping four toys, because it teaches the
+player that the loadout screen does not matter. The four below all do something you feel on the
+first night you take them. Stash is not built either, so all four are available from the start —
+the per-night *choice* is the part that matters and it works today.
+
+| Toy | Effect | Cost |
+| --- | --- | --- |
+| **The Rope** | Grants **Hold** (`H`) | 6 HP/s while anything is pushing |
+| **The Weighted Bear** | Kara HP 100 → 150 | 15% slower |
+| **The Sock Monkey** | Bubbles 2 → 4 charges, regen 8s → 5s | — |
+| **The Old Blanket Scrap** | Coax 3.0s → 1.0s, and +50% speed for 3s on emerging | — |
+
+**Hold, as built.** *"Cannot pass"* is literal: anything within 90px that is past her point on the
+road is clamped there and does not advance. She is a wall for up to 8 seconds — the only time in
+this game she stops anything directly — and it costs her **48 of her 100 HP** at full duration.
+`H` again lets go early, which is load-bearing: a player who cannot stop paying will never press it
+at all.
+
+Two things Hold does *not* do, both deliberate:
+
+- It does not hold anything that has left the road. A Bone Dog chasing her is not trying to get
+  past her, and clamping it to a road position it no longer has would teleport it across the map.
+  It still takes the slow.
+- It does not make her safe. She is targetable the whole time — planted in the road with her feet
+  dug in is the most exposed she ever is, and it should be.
+
+Held enemies queue along a stable per-enemy sliver of road rather than stacking on one pixel.
+
 ---
 
 ## 5. The wards

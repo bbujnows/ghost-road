@@ -7,6 +7,7 @@ import {
   EAR_PERK_LEAD,
   FAST_FORWARD,
   GUST,
+  HOLD,
   HOMESTEAD_MAX_HP,
   KARA,
   LANTERN,
@@ -24,6 +25,8 @@ import { Boss, Corpse, spawn } from './enemies'
 import type { Enemy, EnemyContext } from './enemies'
 import { Kara } from './kara'
 import type { KaraMode, Threat } from './kara'
+import { TOYS, loadoutFor } from './toys'
+import type { ToyId } from './toys'
 import { LightingSystem, bandOf, reachFraction } from './lighting'
 import type { Band, Light } from './lighting'
 import { ColdIron, Lantern } from './wards'
@@ -99,6 +102,12 @@ export interface GameState {
   karaState: KaraMode
   /** Seconds left in whatever is holding her; 0 when she is free. */
   karaStateRemaining: number
+  /** §4. The toy equipped for this night. */
+  toy: ToyId
+  /** Only true on a night the Rope is equipped — Hold does not otherwise exist. */
+  hasHold: boolean
+  holdReady: boolean
+  holdCooldown: number
   /** Lanterns the Tallow Man has put out, and the longest one has left. */
   lanternsOut: number
   relightIn: number
@@ -165,6 +174,8 @@ export class Game {
   private homesteadHp = HOMESTEAD_MAX_HP
   private oil = NIGHTS[0].startingOil
 
+  /** §4. The toy for the coming night, chosen on the briefing. */
+  private toy: ToyId = 'rope'
   /** Seconds to the next gust. 0 on a still night. */
   private gustTimer = 0
   /** §3.2 false ear-perks. The Bell Witch plants these; they have no bodies. */
@@ -338,6 +349,9 @@ export class Game {
         this.blowBubble()
       } else if (key === 'z') {
         this.blanket()
+      } else if (key === 'h' && this.kara.loadout.hold) {
+        // Only when the Rope is equipped — otherwise H stays the help key it has been.
+        this.hold()
       } else if (key === 'f') {
         this.toggleSpeed()
       } else if (key === '?' || key === '/' || key === 'h') {
@@ -425,6 +439,21 @@ export class Game {
   blanket() {
     if (this.inputLocked) return
     this.kara.blanket()
+  }
+
+  /** §3.2 Hold. Only exists on a night the Rope is equipped. */
+  hold() {
+    if (this.inputLocked) return
+    this.kara.hold()
+  }
+
+  /** §4. Chosen on the briefing screen; takes effect when the night starts. */
+  chooseToy(toy: ToyId) {
+    if (this.phase !== 'briefing') return
+    this.toy = toy
+    this.kara.loadout = loadoutFor(toy)
+    this.kara.hp = this.kara.loadout.maxHp
+    this.save()
   }
 
   /**
@@ -517,6 +546,26 @@ export class Game {
     })
 
     return { kind, x: ward.x, y: ward.y, branches }
+  }
+
+  /** How far along the road a point is, as a path parameter. Hold needs this. */
+  private nearestPathT(x: number, y: number): number {
+    let best = Infinity
+    let at = 0
+    for (let i = 0; i < ROAD.length - 1; i++) {
+      const a = ROAD[i]
+      const b = ROAD[i + 1]
+      const abx = b.x - a.x
+      const aby = b.y - a.y
+      const len2 = abx * abx + aby * aby || 1
+      const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (y - a.y) * aby) / len2))
+      const d = Math.hypot(x - (a.x + abx * t), y - (a.y + aby * t))
+      if (d < best) {
+        best = d
+        at = i + t
+      }
+    }
+    return at
   }
 
   /** The angle of the road segment nearest a point — iron lies along the road bed. */
@@ -778,7 +827,7 @@ export class Game {
     }
     this.bubbles = []
 
-    this.kara.reset(HOMESTEAD.x - 175, HOMESTEAD.y + 48)
+    this.kara.reset(HOMESTEAD.x - 175, HOMESTEAD.y + 48, this.toy)
 
     this.homesteadHp = HOMESTEAD_MAX_HP
     this.oil = this.night.startingOil
@@ -812,7 +861,7 @@ export class Game {
     try {
       localStorage.setItem(
         Game.SAVE_KEY,
-        JSON.stringify({ night: this.nightIndex, wave: this.waveIndex }),
+        JSON.stringify({ night: this.nightIndex, wave: this.waveIndex, toy: this.toy }),
       )
     } catch {
       // Private browsing, a full quota, a locked-down work machine. Losing the save is
@@ -824,10 +873,11 @@ export class Game {
     try {
       const raw = localStorage.getItem(Game.SAVE_KEY)
       if (!raw) return
-      const parsed = JSON.parse(raw) as { night?: unknown }
+      const parsed = JSON.parse(raw) as { night?: unknown; toy?: unknown }
       const n = typeof parsed.night === 'number' ? parsed.night : 0
       // Clamp rather than trust: the file is user-editable and the roster is not.
       this.nightIndex = Math.max(0, Math.min(NIGHTS.length - 1, Math.floor(n)))
+      if (TOYS.some((t) => t.id === parsed.toy)) this.toy = parsed.toy as ToyId
     } catch {
       this.nightIndex = 0
     }
@@ -895,13 +945,42 @@ export class Game {
       },
     }
 
+    // §3.2 Hold. "Enemies within 90px are slowed 35% and cannot pass" — *cannot pass* is
+    // literal, so anything inside the radius is clamped to her point on the road and
+    // does not advance past it. She is a wall, which is the only time in this game she
+    // stops anything directly.
+    const holdT = this.kara.holding ? this.nearestPathT(this.kara.x, this.kara.y) : null
+    let straining = false
+
+    if (holdT !== null) {
+      for (const enemy of this.enemies) {
+        if (Math.hypot(enemy.x - this.kara.x, enemy.y - this.kara.y) > HOLD.radius) continue
+        enemy.slowFactor = Math.min(enemy.slowFactor, HOLD.slow)
+      }
+    }
+
     for (const enemy of this.enemies) {
       enemy.update(dt, context)
+
+      // Only road traffic. A Bone Dog has left the ruts to come at her and has no
+      // meaningful position on the road any more — clamping it would teleport it. It is
+      // also not trying to get *past* her, so there is nothing there to hold.
+      if (holdT !== null && enemy.onRoad && enemy.pathT > holdT) {
+        const near = Math.hypot(enemy.x - this.kara.x, enemy.y - this.kara.y) <= HOLD.radius
+        if (near) {
+          enemy.seek(holdT - enemy.holdOffset)
+          straining = true
+        }
+      }
+
       if (enemy.arrived) {
         this.homesteadHp -= enemy.porchDamage
         enemy.hp = 0
       }
     }
+
+    // It only costs her while something is actually pushing back.
+    if (straining) this.kara.strain(dt)
 
     // Cleanup. Oil is only awarded for kills, not for things that reached the porch.
     // A killed enemy hands its container to a Corpse and falls; one that reached the
@@ -1041,7 +1120,11 @@ export class Game {
       bubbleCharges: this.kara.bubbleCharges,
       bubbleMax: BUBBLES.maxCharges,
       karaHp: Math.ceil(this.kara.hp),
-      karaMaxHp: KARA.hp,
+      karaMaxHp: this.kara.loadout.maxHp,
+      toy: this.toy,
+      hasHold: this.kara.loadout.hold,
+      holdReady: this.kara.holdReady || this.kara.holding,
+      holdCooldown: this.kara.holdCooldownRemaining,
       karaState: this.kara.state,
       karaStateRemaining: this.kara.stateRemaining,
       lanternsOut: this.lanterns.filter((l) => l.snuffed).length,

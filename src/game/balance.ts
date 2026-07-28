@@ -520,6 +520,28 @@ export const BLANKET = {
   coax: 3.0,
 } as const
 
+/**
+ * §3.2 Hold. Requires the Rope toy equipped that night (§4) — the consult moved it off
+ * the bond track so it is a per-night build choice rather than a permanent unlock.
+ *
+ * "Plants her; enemies within 90px are slowed 35% and cannot pass. Max 8s. She takes
+ * damage the whole time." *Cannot pass* is literal: anything inside the radius is held
+ * at her position on the road and does not advance past it. She is a wall for 8 seconds,
+ * which is the only time in this game she stops things directly.
+ *
+ * The doc specifies that it costs her health but not how much. 6 HP/s is set so a full
+ * 8-second hold costs 48 of her 100 — survivable once, ruinous twice, and it only bills
+ * her while something is actually pushing against her.
+ */
+export const HOLD = {
+  radius: 90,
+  slow: 0.65,
+  maxDuration: 8,
+  cooldown: 20,
+  /** Per second, and only while at least one thing is being held. */
+  strain: 6,
+} as const
+
 /** §3.1. Rises to 350 at Bond T1, which is not built yet. */
 export const EAR_PERK_RADIUS = 280
 /** §3.2. She tells you this long before the threat becomes visible. */

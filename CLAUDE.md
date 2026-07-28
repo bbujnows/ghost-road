@@ -16,12 +16,19 @@ Crawler, Tallow Man, Bone Dog, The Unseen) · ward upgrade branches · **all sev
 bosses on 3/5/7, per-night fog and wind, and `localStorage` progress · lamp oil, homestead HP,
 Normal-mode retry.
 
-Next: the **toy loadout** (design doc §4), then **step 8** — the Nightly Road and the procedural
-Long Road.
+The toy loadout ships with four of the doc's eight toys, including Hold on the Rope.
+
+Next: **step 8** — the Nightly Road (one seeded night per calendar day) and the procedural Long
+Road (endless).
 
 Not built: the other wards (salt, bell, spring line, bottle tree, fiddler), the Drownd Girl, Hant
-Cat, Hollow Kin, Snallygaster and Fetch, bond, stash, toys, Hard mode, endless, audio. Do not add
-them ahead of the build order.
+Cat, Hollow Kin, Snallygaster and Fetch, bond, stash, Hard mode, endless, audio. Do not add them
+ahead of the build order.
+
+**Four toys are blocked, not cut** — Ragged Fox needs bond, Tennis Ball needs the ball drop and
+stash, the Squeaker needs the bark, the Stuffed Duck needs the spring line. Shipping a toy whose
+effect is inert is worse than shipping four, because it teaches the player that the loadout screen
+does not matter. See design doc §4.1.
 
 **Three bosses are blocked, not cut** — the Snallygaster needs aerial pathing, the Drownd Girl needs
 salt + water + a light-damage source, and the Fetch is deferred by the consult itself. They keep
@@ -64,10 +71,11 @@ mechanic does not trace back to a real trait, it does not belong to her.
 | Loves bubbles | **Bubbles** — she chases at 180px/s; her blink. The bubble is a drifting light that reveals and never kills | ✅ |
 | Loves being under blankets | **Blanket** — untargetable and blind; she will not come out for 3s and takes 3 more to coax | ✅ |
 | Territorial at home | **Squaring up** — she runs the Tallow Man off a lantern without a sound | ✅ |
+| Has never lost a game of tug | **Hold** — plants herself; nothing within 90px gets past. Needs the Rope toy | ✅ |
+| Loves stuffed toys | **Toy Loadout** — one per night, four built of eight | ✅ |
 | Silent except territorial at home | **The Bark** — silent all game; one bark means something reached the porch. Once per night, maximum. | ❌ |
 | Attacks water from a hose | **The Spring Line** — running-water ward (real folklore: spirits can't cross it); she amplifies it and is healed by it | ❌ |
 | Loves balls | **The Ball Stash** — retrieval hoard under the porch, between-night currency | ❌ |
-| Loves stuffed toys | **Toy Loadout** — one toy per night, each a different passive | ❌ |
 
 **Her damage stays zero.** The moment she becomes a gun she becomes a tower, and the position — *the
 tower defense where you watch the dog, not the road* — dies with it. She changes what is killable,
@@ -91,6 +99,7 @@ src/game/
   Game.ts       orchestrator — waves, oil, homestead HP, input, HUD state bridge
   lighting.ts   the lightmap, the three bands, lightAt() and radiusForThreshold()
   nights.ts     the seven nights — wave tables, fog, wind, starting oil
+  toys.ts       the toy roster, and Loadout — every Kara stat a toy can change
   enemies.ts    Enemy and Boss base classes + the whole roster + Corpse
   wards.ts      Lantern (pure light, snuffable) and ColdIron (damage, only in light)
   kara.ts       her dual rig, her state machine, and every ability she has
@@ -185,6 +194,13 @@ native binary downloaded corrupt. Fix with `npm install lightningcss-win32-x64-m
   interrupt on a repeating behaviour needs the same check. The same class of bug bit again with
   Storm Glass II: `snuff()` has to return `false` so the Tallow Man knows the flame beat him,
   otherwise he reaches for a lamp that never goes out and stands there all night.
+- **Every Kara stat a toy can change is read from `kara.loadout`, never from the balance constant.**
+  Reading `BUBBLES.maxCharges` where the Sock Monkey is meant to apply is a bug that stays invisible
+  until someone wonders why a toy does nothing. `loadoutFor()` resolves the toy to plain numbers
+  once, at the start of a night.
+- **Do not rewrite source files through PowerShell `Get-Content`/`Set-Content`.** Windows PowerShell
+  5.1 reads as ANSI and writes UTF-8-with-BOM, which turns every box-drawing character in this
+  repo's comment banners into mojibake. Use the Edit tool.
 - **A ward's upgrade cost comes back from `upgrade()`, never from a separate price lookup.** It
   returns 0 when the branch is closed or maxed, so the one place the exclusivity rule lives is also
   the place that decides whether the player pays. Reading the price separately lets the two drift

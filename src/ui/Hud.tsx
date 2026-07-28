@@ -1,5 +1,7 @@
 import type { GameState } from '../game/Game'
 import { OIL_PER_LIT_KILL, OIL_PER_WAVE } from '../game/balance'
+import { TOYS } from '../game/toys'
+import type { ToyId } from '../game/toys'
 import './hud.css'
 
 const BAND_LABEL = {
@@ -37,6 +39,7 @@ const KARA_STATE: Partial<Record<GameState['karaState'], string>> = {
   blanket: 'under the blanket',
   coax: 'coming out',
   down: 'down',
+  hold: 'holding the line',
 }
 
 /**
@@ -86,6 +89,20 @@ function KaraPanel({ state }: { state: GameState }) {
         </span>
       </div>
 
+      {state.hasHold && (
+        <div className={`ability ${state.holdReady ? 'ready' : 'cooling'}`}>
+          <kbd>H</kbd>
+          <span className="ability-name">Hold</span>
+          <span className="ability-state">
+            {state.karaState === 'hold'
+              ? 'holding'
+              : state.holdCooldown > 0
+                ? `${Math.ceil(state.holdCooldown)}s`
+                : 'ready'}
+          </span>
+        </div>
+      )}
+
       <div className={`ability ${state.karaState === 'free' ? 'ready' : 'cooling'}`}>
         <kbd>Z</kbd>
         <span className="ability-name">Blanket</span>
@@ -97,6 +114,33 @@ function KaraPanel({ state }: { state: GameState }) {
             : 'hide'}
         </span>
       </div>
+    </div>
+  )
+}
+
+/**
+ * §4. One toy per night, chosen before it starts.
+ *
+ * Every one of them names its cost on the card. A toy that is only upside is a toy that
+ * is mandatory, and a mandatory choice is not one.
+ */
+function ToyPicker({ toy, onChoose }: { toy: ToyId; onChoose: (id: ToyId) => void }) {
+  return (
+    <div className="toys">
+      <p className="eyebrow">What she takes out with her</p>
+      {TOYS.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          className={`toy ${toy === t.id ? 'chosen' : ''}`}
+          onClick={() => onChoose(t.id)}
+        >
+          <span className="toy-name">{t.name}</span>
+          <span className="toy-effect">{t.effect}</span>
+          {t.cost && <span className="toy-cost">{t.cost}</span>}
+          <span className="toy-flavor">{t.flavor}</span>
+        </button>
+      ))}
     </div>
   )
 }
@@ -165,6 +209,7 @@ export interface HudProps {
   onSelectWard: (id: 'lantern' | 'iron') => void
   onBuyUpgrade: (slot: number) => void
   onRestartCampaign: () => void
+  onChooseToy: (id: ToyId) => void
 }
 
 /**
@@ -279,6 +324,7 @@ export function Hud({
   onSelectWard,
   onBuyUpgrade,
   onRestartCampaign,
+  onChooseToy,
 }: HudProps) {
   if (!state) return null
 
@@ -426,6 +472,7 @@ export function Hud({
             ) : (
               <p className="footnote sheet-note">Press ? at any time for the full rules.</p>
             )}
+            <ToyPicker toy={state.toy} onChoose={onChooseToy} />
             <button type="button" className="primary" onClick={onBegin}>
               Hold the night
             </button>

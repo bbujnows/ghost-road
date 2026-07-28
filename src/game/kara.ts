@@ -1,6 +1,8 @@
 import { Container, Graphics } from 'pixi.js'
-import { BLANKET, BUBBLES, EAR_PERK_RADIUS, KARA, KARA_WALK_SPEED, SHOW_BELLY } from './balance'
+import { BLANKET, BUBBLES, EAR_PERK_RADIUS, HOLD, KARA, KARA_WALK_SPEED, SHOW_BELLY } from './balance'
 import type { LightingSystem } from './lighting'
+import { loadoutFor } from './toys'
+import type { Loadout, ToyId } from './toys'
 import { HOMESTEAD } from './world'
 
 /**
@@ -46,11 +48,17 @@ export interface Threat {
  *
  * ── What she can do ─────────────────────────────────────────────────────────
  *
- * Built: Ear-Perk (passive), Send, Bubbles, Show Belly, the Blanket, and going Down.
- * Every one of them traces to something the real dog does.
+ * Built: Ear-Perk (passive), Send, Bubbles, Show Belly, the Blanket, going Down, and
+ * Hold when the Rope is equipped. Every one of them traces to something the real dog
+ * does.
  *
- * Not built, and specified in the design doc: the bark (§10), the hose (§3.3), Hold and
- * the toy loadout (§4), the dropped ball (§3.5), bond (§3.4), and Lead.
+ * **Every stat a toy can change is read from `loadout`, never from the balance constant
+ * directly.** Reading `BUBBLES.maxCharges` where the Sock Monkey is meant to apply is
+ * the bug this structure exists to prevent, and it would be invisible until someone
+ * wondered why a toy did nothing.
+ *
+ * Not built, and specified in the design doc: the bark (§10), the hose (§3.3), the
+ * dropped ball (§3.5), bond (§3.4), and Lead.
  */
 
 /** Lab/pit mix: warm gold coat. */
@@ -84,7 +92,7 @@ const ease = (t: number) => t * t * (3 - 2 * t)
  * at 0 HP she limps home and is unavailable, and the player is blind for that stretch.
  * That is the entire cost, and it is enough.
  */
-export type KaraMode = 'free' | 'belly' | 'blanket' | 'coax' | 'down'
+export type KaraMode = 'free' | 'belly' | 'blanket' | 'coax' | 'down' | 'hold'
 
 /**
  * The quilt off the porch rail. Drawn under the darkness overlay on purpose: a dog
@@ -402,6 +410,12 @@ export class Kara {
   /** §3.1. She is never permanently lost; at 0 this becomes 25 seconds of absence. */
   hp: number = KARA.hp
 
+  /**
+   * §4. The night's toy, resolved to plain numbers once so nothing downstream has to ask
+   * which toy is equipped.
+   */
+  loadout: Loadout = loadoutFor('rope')
+
   private mode: KaraMode = 'free'
 
   get state(): KaraMode {
@@ -419,7 +433,9 @@ export class Kara {
    * the fight, not a thing left on the field to be chewed on.
    */
   get targetable() {
-    return this.mode === 'free' || this.mode === 'belly'
+    // Holding included on purpose: she is planted in the road with her feet dug in. It
+    // is the most exposed she ever is, and it should be.
+    return this.mode === 'free' || this.mode === 'belly' || this.mode === 'hold'
   }
 
   /** Seconds left in whatever is currently holding her, for the HUD. */
@@ -460,6 +476,10 @@ export class Kara {
   private downTimer = 0
   private underTimer = 0
   private coaxTimer = 0
+  private holdTimer = 0
+  private holdCooldown = 0
+  /** Seconds of Blanket Scrap speed left after she comes out. */
+  private boost = 0
   /** 0 in the open, 1 completely hidden. Drives the quilt and hides the rigs. */
   private under = 0
 
@@ -493,12 +513,12 @@ export class Kara {
     if (this.mode === 'blanket') {
       if (!this.leaveBlanket()) return
       this.target = { x, y }
-      this.speed = KARA_WALK_SPEED
+      this.speed = this.loadout.walkSpeed
       return
     }
     if (this.busy) return
     this.target = { x, y }
-    this.speed = KARA_WALK_SPEED
+    this.speed = this.loadout.walkSpeed
   }
 
   /**
@@ -523,8 +543,47 @@ export class Kara {
   private leaveBlanket(): boolean {
     if (this.mode !== 'blanket' || this.underTimer < BLANKET.minimum) return false
     this.mode = 'coax'
-    this.coaxTimer = BLANKET.coax
+    this.coaxTimer = this.loadout.blanketCoax
     return true
+  }
+
+  get holdReady() {
+    return this.loadout.hold && this.holdCooldown <= 0 && this.mode === 'free'
+  }
+
+  get holdCooldownRemaining() {
+    return Math.max(0, this.holdCooldown)
+  }
+
+  /** True while she is planted. The Game reads this to stop things getting past her. */
+  get holding() {
+    return this.mode === 'hold'
+  }
+
+  /**
+   * §3.2 Hold, granted by the Rope (§4). She plants herself and nothing gets past. `H`
+   * again lets go early, which matters — the full 8 seconds costs her half her health,
+   * and a player who cannot stop paying will simply never press it.
+   */
+  hold(): boolean {
+    if (this.mode === 'hold') {
+      this.mode = 'free'
+      this.holdTimer = 0
+      return true
+    }
+    if (!this.holdReady) return false
+
+    this.mode = 'hold'
+    this.holdTimer = HOLD.maxDuration
+    this.holdCooldown = HOLD.cooldown
+    this.target = null
+    return true
+  }
+
+  /** Called by the Game while she is actually straining against something. */
+  strain(dt: number) {
+    if (this.mode !== 'hold') return
+    this.bite(HOLD.strain * dt)
   }
 
   /**
@@ -554,22 +613,31 @@ export class Kara {
   /** Between waves she gets a breather. Not from the doc — see KARA.healPerWave. */
   rest(amount: number) {
     if (this.mode === 'down') return
-    this.hp = Math.min(KARA.hp, this.hp + amount)
+    this.hp = Math.min(this.loadout.maxHp, this.hp + amount)
   }
 
-  /** Retrying the night. She starts it whole, whatever happened in the last one. */
-  reset(x: number, y: number) {
+  /**
+   * Starting a night — a retry or the next one. She starts it whole, whatever happened in
+   * the last one, and the night's toy is applied here because it is chosen on the
+   * briefing screen and must be in force before the first spawn.
+   */
+  reset(x: number, y: number, toy: ToyId) {
+    this.loadout = loadoutFor(toy)
+
     this.x = x
     this.y = y
-    this.hp = KARA.hp
+    this.hp = this.loadout.maxHp
     this.mode = 'free'
     this.target = null
-    this.speed = KARA_WALK_SPEED
+    this.speed = this.loadout.walkSpeed
     this.bellyTimer = 0
     this.bellyCooldown = 0
     this.roll = 0
     this.bellyGlow = 0
-    this.charges = BUBBLES.maxCharges
+    this.charges = this.loadout.bubbleCharges
+    this.holdTimer = 0
+    this.holdCooldown = 0
+    this.boost = 0
     this.under = 0
     this.downTimer = 0
     this.underTimer = 0
@@ -604,7 +672,10 @@ export class Kara {
     let moving = false
 
     this.bellyCooldown = Math.max(0, this.bellyCooldown - dt)
-    this.charges = Math.min(BUBBLES.maxCharges, this.charges + dt / BUBBLES.regen)
+    this.charges = Math.min(
+      this.loadout.bubbleCharges,
+      this.charges + dt / this.loadout.bubbleRegen,
+    )
 
     // ── The blanket ──────────────────────────────────────────────────────────
     // She goes under fast and comes out slowly, and no part of her works while she is
@@ -624,6 +695,7 @@ export class Kara {
         if (this.coaxTimer <= 0) {
           this.mode = 'free'
           this.under = 0
+          this.boost = this.loadout.emergeBoost
         }
       }
 
@@ -660,6 +732,18 @@ export class Kara {
     this.roll = 0
     this.bellyGlow = 0
 
+    this.holdCooldown = Math.max(0, this.holdCooldown - dt)
+    this.boost = Math.max(0, this.boost - dt)
+
+    // ── Hold (§3.2, Rope toy) ────────────────────────────────────────────────
+    // She does not move and does not take orders, but she is still listening — planted
+    // is not the same as absent, and her ears are the one thing this never costs.
+    if (this.mode === 'hold') {
+      this.holdTimer -= dt
+      if (this.holdTimer <= 0) this.mode = 'free'
+      this.target = null
+    }
+
     // ── Down (§3.1) ──────────────────────────────────────────────────────────
     // She keeps limping toward the porch while the clock runs, so the player watches
     // her go rather than seeing her switch off. Nothing else about her works.
@@ -667,8 +751,8 @@ export class Kara {
       this.downTimer -= dt
       if (this.downTimer <= 0) {
         this.mode = 'free'
-        this.hp = KARA.hp
-        this.speed = KARA_WALK_SPEED
+        this.hp = this.loadout.maxHp
+        this.speed = this.loadout.walkSpeed
       }
       this.alert = false
       this.earLift = Math.max(0, this.earLift - dt * 2)
@@ -682,11 +766,13 @@ export class Kara {
 
       if (dist < 4) {
         this.target = null
-        this.speed = KARA_WALK_SPEED
+        this.speed = this.loadout.walkSpeed
       } else {
         moving = true
-        this.x += (dx / dist) * this.speed * dt
-        this.y += (dy / dist) * this.speed * dt
+        // The Blanket Scrap's parting gift: she comes out of the quilt already running.
+        const v = this.speed * (this.boost > 0 ? this.loadout.emergeSpeed : 1) * dt
+        this.x += (dx / dist) * v
+        this.y += (dy / dist) * v
         if (Math.abs(dx) > 1) this.facing = dx > 0 ? 1 : -1
         // Chasing a bubble, her legs go over faster than a walk.
         this.walk += dt * (this.speed > KARA_WALK_SPEED ? 15 : 9)
@@ -764,6 +850,14 @@ export class Kara {
 
     this.body.position.set(this.x, this.y)
     this.markings.position.set(this.x, this.y)
+
+    // Holding: front end down, weight back, whole body braced against the road. A dog
+    // that is refusing to move looks nothing like a dog that is standing still.
+    const brace = this.mode === 'hold' ? 1 : 0
+    for (const rig of [this.coatRig, this.markRig]) {
+      rig.root.rotation = brace * -0.09 * this.facing
+      rig.root.scale.y = SCALE * (1 - brace * 0.06)
+    }
 
     // ── Under the blanket ────────────────────────────────────────────────────
     // She goes, and the quilt comes. One white paw is left out — in an unlit yard it is

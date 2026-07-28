@@ -276,6 +276,74 @@ kbd {
   border-color: #ffc078;
 }
 
+/* ── The toy loadout ─────────────────────────────────────────────────────── */
+
+.toys {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+  padding: 14px 0;
+  border-top: 1px solid rgba(198, 214, 210, 0.1);
+  border-bottom: 1px solid rgba(198, 214, 210, 0.1);
+}
+
+.toys .eyebrow {
+  margin: 0 0 4px;
+}
+
+.toy {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid rgba(198, 214, 210, 0.13);
+  background: rgba(255, 255, 255, 0.025);
+  color: #b9c4c1;
+  font: inherit;
+  cursor: pointer;
+  transition: background 130ms ease-out, border-color 130ms ease-out;
+}
+
+.toy:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.toy.chosen {
+  border-color: rgba(255, 192, 120, 0.5);
+  background: rgba(255, 192, 120, 0.09);
+}
+
+.toy-name {
+  font-size: 13px;
+  color: #eae7de;
+}
+
+.toy.chosen .toy-name {
+  color: #ffc078;
+}
+
+.toy-effect {
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* Every toy names its cost. One that is only upside is one that is mandatory. */
+.toy-cost {
+  font-size: 11px;
+  color: #ff8f6b;
+}
+
+.toy-flavor {
+  font-size: 10.5px;
+  font-style: italic;
+  color: #6c7a78;
+}
+
 /* ── Ward upgrades ───────────────────────────────────────────────────────── */
 
 .upgrades {

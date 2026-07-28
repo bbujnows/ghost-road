@@ -128,6 +128,21 @@ export abstract class Enemy {
     return this.t
   }
 
+  /**
+   * False once it has left the road bed. Anything that steers for itself has no
+   * meaningful `pathT`, so nothing may clamp it back onto the ruts — doing that to a
+   * Bone Dog mid-chase teleports it across the map.
+   */
+  get onRoad() {
+    return !this.offRoad
+  }
+
+  /**
+   * A stable sliver of road, so a queue held at one point stands in a line rather than
+   * stacking on a single pixel.
+   */
+  readonly holdOffset = Math.random() * 0.05
+
   seek(t: number) {
     this.t = Math.max(0, Math.min(this.path.length - 1.001, t))
     const seg = Math.floor(this.t)
