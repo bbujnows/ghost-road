@@ -2,16 +2,21 @@ import { Container, Graphics } from 'pixi.js'
 import {
   BAND_DIM,
   BAND_LIT,
+  BELL_WITCH,
   BONE_DOG,
+  BOSS_GLOW,
   CRAWLER,
   DEATH_DURATION,
+  DROVER,
+  GREENBRIER,
   PORCH_DAMAGE,
   ROAD_WALKER,
   TALLOW_MAN,
+  UNSEEN,
 } from './balance'
 import type { DamageType, EnemyKind } from './balance'
 import { damageMultiplier } from './lighting'
-import type { LightingSystem } from './lighting'
+import type { Light, LightingSystem } from './lighting'
 import { HOMESTEAD, ROAD } from './world'
 import type { Vec2 } from './world'
 
@@ -52,11 +57,15 @@ export interface Quarry {
   bite(amount: number): void
 }
 
-/** Everything on the board that an enemy is allowed to react to. */
+/** Everything on the board that an enemy is allowed to react to, or do to it. */
 export interface EnemyContext {
   lighting: LightingSystem
   kara: Quarry
   lanterns: Snuffable[]
+  /** Raise something onto the road at a point already travelled. Bosses use this. */
+  raise: (kind: EnemyKind, pathT: number) => void
+  /** Plant a phantom in Kara's hearing. The Bell Witch's whole attack. */
+  lie: (x: number, y: number, seconds: number) => void
 }
 
 export abstract class Enemy {
@@ -112,6 +121,24 @@ export abstract class Enemy {
 
   get dead() {
     return this.hp <= 0
+  }
+
+  /** How far down the road it is. Bosses raise things at their own position. */
+  get pathT() {
+    return this.t
+  }
+
+  seek(t: number) {
+    this.t = Math.max(0, Math.min(this.path.length - 1.001, t))
+    const seg = Math.floor(this.t)
+    const frac = this.t - seg
+    this.x = this.path[seg].x + (this.path[seg + 1].x - this.path[seg].x) * frac
+    this.y = this.path[seg].y + (this.path[seg + 1].y - this.path[seg].y) * frac
+  }
+
+  /** How visible it is at a given illumination. The Unseen overrides this. */
+  protected alphaAt(L: number): number {
+    return L < BAND_DIM ? 0 : 0.5 + 0.5 * Math.min(1, (L - BAND_DIM) / 0.4)
   }
 
   /** True once it has reached the porch. */
@@ -229,7 +256,7 @@ export abstract class Enemy {
     // §2.1: in the dark band an enemy is invisible, full stop. This is the rule the
     // whole game is built on, and it has to be literal or none of it lands.
     const L = ctx.lighting.lightAt(this.x, this.y)
-    this.gfx.alpha = L < BAND_DIM ? 0 : 0.5 + 0.5 * Math.min(1, (L - BAND_DIM) / 0.4)
+    this.gfx.alpha = this.alphaAt(L)
     this.gfx.position.set(this.x, this.y)
 
     // Hit feedback: a scorch flash and a flinch. Tint multiplies, so the flash pushes
@@ -750,10 +777,354 @@ export class BoneDog extends Enemy {
   }
 }
 
+/**
+ * The Unseen. §6: alpha `0.06 + 0.94 × L`, genuinely invisible in the dark.
+ *
+ * It keeps the hard rule — nothing below Dim is drawn — but above the line the doc's
+ * curve makes it consistently fainter than anything else on the road, so it never quite
+ * resolves. There is no trick to it and no counter to buy: you learn it is there from
+ * Kara's ears, or you learn it is there when it reaches the porch.
+ */
+export class Unseen extends Enemy {
+  readonly kind = 'unseen' as const
+
+  private readonly veil = new Container()
+  private readonly limbs: Graphics
+
+  constructor() {
+    super({ hp: UNSEEN.hp, speed: UNSEEN.speed, porchDamage: PORCH_DAMAGE.unseen })
+    this.drift = 11
+    this.gaitRate = 2.4
+
+    const pale = 0xc4d2d8
+    const H = 50
+
+    // No shadow. It does not sit on the ground the way the others do.
+    const body = new Graphics()
+    body
+      .moveTo(-4, -H)
+      .quadraticCurveTo(-9, -H / 2, -7, -6)
+      .quadraticCurveTo(0, -2, 7, -6)
+      .quadraticCurveTo(9, -H / 2, 4, -H)
+      .fill({ color: pale, alpha: 0.22 })
+    // A suggestion of a head, and nothing in it.
+    body.ellipse(0, -H + 4, 5, 6.5).fill({ color: pale, alpha: 0.3 })
+    // The one hard edge on it: the outline, which is all you ever really see.
+    body
+      .moveTo(-4, -H)
+      .quadraticCurveTo(-9, -H / 2, -7, -6)
+      .moveTo(4, -H)
+      .quadraticCurveTo(9, -H / 2, 7, -6)
+      .stroke({ width: 1, color: pale, alpha: 0.5 })
+
+    this.limbs = new Graphics()
+    this.veil.addChild(body, this.limbs)
+    this.frame.addChild(this.veil)
+  }
+
+  /** §6's curve. Fainter than a walker at every illumination, always. */
+  protected alphaAt(L: number): number {
+    return L < BAND_DIM ? 0 : 0.06 + 0.94 * L
+  }
+
+  protected animate(_dt: number) {
+    // It does not walk. It drifts, and the bottom of it never quite settles.
+    this.veil.position.y = Math.sin(this.gait * 0.9) * 2.2
+    this.veil.rotation = Math.sin(this.gait * 0.6) * 0.045
+
+    this.limbs.clear()
+    for (let i = 0; i < 2; i++) {
+      const sway = Math.sin(this.gait * 1.3 + i * 2.1) * 4
+      this.limbs
+        .moveTo(i ? 6 : -6, -34)
+        .quadraticCurveTo(i ? 11 + sway : -11 + sway, -24, i ? 8 : -8, -14)
+        .stroke({ width: 1.6, color: 0xc4d2d8, alpha: 0.35, cap: 'round' })
+    }
+  }
+}
+
+/**
+ * Bosses.
+ *
+ * Every one of them carries a faint self-light — enough to hold itself at Dim and no
+ * more. So a boss is always visible and never killable on its own terms: you can watch
+ * exactly what is coming and still have to light it properly to touch it. A boss the
+ * player cannot see is unfair; one that lights its own grave is not a boss.
+ */
+export abstract class Boss extends Enemy {
+  /** Registered by the caller, because only it owns the lighting system. */
+  readonly glow: Light = {
+    x: 0,
+    y: 0,
+    radius: BOSS_GLOW.radius,
+    color: 0xa8c4d8,
+    intensity: BOSS_GLOW.intensity,
+  }
+
+  update(dt: number, ctx: EnemyContext) {
+    super.update(dt, ctx)
+    this.glow.x = this.x
+    this.glow.y = this.y - 20
+    // It goes out with them. A corpse should not keep lighting the road.
+    if (this.dead) this.glow.intensity = 0
+  }
+}
+
+/**
+ * The Bell Witch (Night 3). She does not come for the homestead so much as for the one
+ * instrument the player actually trusts.
+ *
+ * While she is alive, Kara perks at things that are not there. §3.2 reserves false
+ * positives for Night 5 as ambient dread; here they have an author, they are frequent,
+ * and they stop the moment she goes down — so the player can *earn* their radar back.
+ */
+export class BellWitch extends Boss {
+  readonly kind = 'bellWitch' as const
+
+  private readonly shroud = new Container()
+  private readonly hands = new Graphics()
+  private lieTimer = 1.5
+
+  constructor() {
+    super({ hp: BELL_WITCH.hp, speed: BELL_WITCH.speed, porchDamage: PORCH_DAMAGE.bellWitch })
+    this.drift = 5
+    this.gaitRate = 1.4
+
+    const cloth = 0x3f4a55
+    const pale = 0xd6dde2
+    const H = 62
+
+    this.shadow.ellipse(0, 2, 16, 5).fill({ color: 0x000000, alpha: 0.3 })
+
+    const body = new Graphics()
+    // A long skirt that never shows a foot.
+    body
+      .moveTo(-7, -H + 14)
+      .quadraticCurveTo(-16, -H / 2, -19, 0)
+      .lineTo(19, 0)
+      .quadraticCurveTo(16, -H / 2, 7, -H + 14)
+      .fill(cloth)
+    // Bonnet, and the dark under its brim.
+    body.ellipse(0, -H + 6, 10, 9).fill(cloth)
+    body.ellipse(0, -H + 8, 7, 7).fill({ color: 0x0f151b, alpha: 0.92 })
+    body.moveTo(-11, -H + 6).quadraticCurveTo(0, -H - 4, 11, -H + 6).fill(cloth)
+    // A white collar, the only clean thing on her.
+    body.moveTo(-6, -H + 14).quadraticCurveTo(0, -H + 18, 6, -H + 14).stroke({ width: 2.5, color: pale })
+
+    // Hands up over where a face should be. She is not hiding it from you.
+    this.hands.position.set(0, -H + 9)
+    this.hands
+      .ellipse(-5, 0, 3.6, 5)
+      .fill(pale)
+      .ellipse(5, 0, 3.6, 5)
+      .fill(pale)
+
+    this.shroud.addChild(body, this.hands)
+    this.frame.addChild(this.shroud)
+  }
+
+  protected behave(dt: number, ctx: EnemyContext) {
+    this.advance(dt)
+
+    this.lieTimer -= dt
+    if (this.lieTimer > 0) return
+    this.lieTimer = BELL_WITCH.lieInterval
+
+    // A phantom somewhere out in the dark, near enough for Kara to hear. It has no body
+    // and never will — the player will send her, or trust her, and be wrong either way.
+    const angle = Math.random() * Math.PI * 2
+    const dist = 120 + Math.random() * 160
+    ctx.lie(
+      ctx.kara.x + Math.cos(angle) * dist,
+      ctx.kara.y + Math.sin(angle) * dist,
+      BELL_WITCH.lieDuration,
+    )
+  }
+
+  protected animate(_dt: number) {
+    this.shroud.position.y = Math.sin(this.gait) * 1.8 - 2
+    this.shroud.rotation = Math.sin(this.gait * 0.7) * 0.03
+    // The hands come away from her face just far enough, then go back.
+    const peek = Math.max(0, Math.sin(this.gait * 0.5))
+    this.hands.position.x = peek * 2.5
+    this.hands.scale.set(1, 1 - peek * 0.15)
+    this.stretch.y = 1 - (1 - this.hp / this.maxHp) * 0.1
+  }
+}
+
+/**
+ * The Greenbrier Ghost (Night 5). Real folklore: Zona Heaster Shue, 1897, whose mother's
+ * testimony about her broken neck convicted a man — which is why her head sits wrong.
+ *
+ * §6: she does not attack. She walks, and everything she passes rises behind her. The
+ * mistake the fight is built to punish is killing the risen instead of her.
+ */
+export class Greenbrier extends Boss {
+  readonly kind = 'greenbrier' as const
+
+  private readonly shroud = new Container()
+  private readonly head = new Container()
+  private raiseTimer = 1
+  /** Pulses when something stands up behind her. */
+  private surge = 0
+
+  constructor() {
+    super({ hp: GREENBRIER.hp, speed: GREENBRIER.speed, porchDamage: PORCH_DAMAGE.greenbrier })
+    this.drift = 4
+    this.gaitRate = 1.7
+
+    const linen = 0xb9bfb4
+    const shade = 0x8d9489
+    const H = 56
+
+    this.shadow.ellipse(0, 2, 14, 4.5).fill({ color: 0x000000, alpha: 0.28 })
+
+    const body = new Graphics()
+    body
+      .moveTo(-6, -H + 12)
+      .quadraticCurveTo(-14, -H / 2, -16, 0)
+      .lineTo(16, 0)
+      .quadraticCurveTo(14, -H / 2, 6, -H + 12)
+      .fill({ color: linen, alpha: 0.88 })
+    // Grave dirt up the hem.
+    body.moveTo(-16, 0).quadraticCurveTo(0, -8, 16, 0).fill({ color: shade, alpha: 0.5 })
+    // Arms hanging perfectly still. She is not reaching for anything.
+    body
+      .moveTo(-6, -H + 16)
+      .quadraticCurveTo(-10, -H / 3, -9, -12)
+      .moveTo(6, -H + 16)
+      .quadraticCurveTo(10, -H / 3, 9, -12)
+      .stroke({ width: 3, color: shade, cap: 'round' })
+
+    // The head, at the angle that got a man hanged.
+    this.head.position.set(0, -H + 8)
+    this.head.rotation = 1.15
+    this.head.addChild(
+      new Graphics()
+        .ellipse(0, 0, 6.5, 8)
+        .fill(linen)
+        .ellipse(-2, -1, 2, 2.6)
+        .fill({ color: 0x14191c, alpha: 0.85 })
+        .ellipse(2.4, -1, 2, 2.6)
+        .fill({ color: 0x14191c, alpha: 0.85 }),
+    )
+
+    this.shroud.addChild(body, this.head)
+    this.frame.addChild(this.shroud)
+  }
+
+  protected behave(dt: number, ctx: EnemyContext) {
+    this.advance(dt)
+    this.surge = Math.max(0, this.surge - dt * 2.5)
+
+    this.raiseTimer -= dt
+    if (this.raiseTimer > 0) return
+    this.raiseTimer = GREENBRIER.raiseInterval
+
+    // Behind her, not at her. What rises has the whole road still to walk, which is what
+    // makes chasing the risen instead of her such an expensive mistake.
+    ctx.raise('walker', Math.max(0, this.pathT - 0.12))
+    this.surge = 1
+  }
+
+  protected animate(_dt: number) {
+    this.shroud.position.y = Math.sin(this.gait) * 1.2 - this.surge * 2
+    // She does not react to being hit. She reacts to what stands up behind her.
+    this.head.rotation = 1.15 + Math.sin(this.gait * 0.6) * 0.05
+    this.stretch.x = 1 + this.surge * 0.06
+    this.stretch.y = (1 - (1 - this.hp / this.maxHp) * 0.08) * (1 + this.surge * 0.05)
+  }
+}
+
+/**
+ * The Drover (Night 7). The same raising verb as the Greenbrier Ghost, twice as fast, on
+ * a body twice as hard, at the end of the only night where fog has halved every lantern
+ * you own. There is no trick to him. There is only whether you built enough.
+ */
+export class Drover extends Boss {
+  readonly kind = 'drover' as const
+
+  private readonly frameBody = new Container()
+  private readonly goad = new Container()
+  private raiseTimer = 2
+  private drive = 0
+
+  constructor() {
+    super({ hp: DROVER.hp, speed: DROVER.speed, porchDamage: PORCH_DAMAGE.drover })
+    this.drift = 3
+    this.gaitRate = 1.5
+
+    const coat = 0x2f3740
+    const trim = 0x5d6b73
+    const H = 74
+
+    this.shadow.ellipse(0, 3, 19, 6).fill({ color: 0x000000, alpha: 0.36 })
+
+    const body = new Graphics()
+    // A long drover's coat, shoulders far too wide.
+    body
+      .moveTo(-13, -H + 16)
+      .quadraticCurveTo(-19, -H / 2, -16, 0)
+      .lineTo(16, 0)
+      .quadraticCurveTo(19, -H / 2, 13, -H + 16)
+      .fill(coat)
+    body.ellipse(0, -H + 17, 16, 7).fill(coat)
+    // Hat with a brim wide enough to be the whole face.
+    body.ellipse(0, -H + 6, 8, 7).fill(coat)
+    body.moveTo(-17, -H + 6).quadraticCurveTo(0, -H + 12, 17, -H + 6).quadraticCurveTo(0, -H + 1, -17, -H + 6).fill(coat)
+    body.moveTo(-9, -H + 3).quadraticCurveTo(0, -H - 3, 9, -H + 3).fill(trim)
+    // Coat seams, so the silhouette is not a slab.
+    body
+      .moveTo(-6, -H + 18)
+      .lineTo(-4, -4)
+      .moveTo(6, -H + 18)
+      .lineTo(4, -4)
+      .stroke({ width: 1, color: trim, alpha: 0.4 })
+
+    // The goad. He is not carrying it, he is using it.
+    this.goad.position.set(12, -H + 26)
+    this.goad.addChild(
+      new Graphics()
+        .moveTo(0, -14)
+        .lineTo(2, 34)
+        .stroke({ width: 2.4, color: 0x6b5a44, cap: 'round' })
+        .circle(0, -15, 2.6)
+        .fill(0x9fb8cf),
+    )
+
+    this.frameBody.addChild(body, this.goad)
+    this.frame.addChild(this.frameBody)
+  }
+
+  protected behave(dt: number, ctx: EnemyContext) {
+    this.advance(dt)
+    this.drive = Math.max(0, this.drive - dt * 3)
+
+    this.raiseTimer -= dt
+    if (this.raiseTimer > 0) return
+    this.raiseTimer = DROVER.raiseInterval
+
+    ctx.raise(Math.random() < 0.35 ? 'crawler' : 'walker', Math.max(0, this.pathT - 0.1))
+    this.drive = 1
+  }
+
+  protected animate(_dt: number) {
+    this.frameBody.position.y = Math.abs(Math.sin(this.gait)) * -1.6
+    this.frameBody.rotation = Math.sin(this.gait) * 0.03
+    // He swings the goad and something gets up. The tell is worth watching for.
+    this.goad.rotation = -0.15 - this.drive * 0.7
+    this.stretch.y = 1 - (1 - this.hp / this.maxHp) * 0.09
+  }
+}
+
 export function spawn(kind: EnemyKind): Enemy {
   if (kind === 'crawler') return new Crawler()
   if (kind === 'tallowMan') return new TallowMan()
   if (kind === 'boneDog') return new BoneDog()
+  if (kind === 'unseen') return new Unseen()
+  if (kind === 'bellWitch') return new BellWitch()
+  if (kind === 'greenbrier') return new Greenbrier()
+  if (kind === 'drover') return new Drover()
   return new RoadWalker()
 }
 

@@ -106,6 +106,83 @@ export class Motes {
 }
 
 /**
+ * Fog and wind (§6, nights 3+).
+ *
+ * The mechanical fog lives in the lightmap, where it shrinks every radius. This is only
+ * the picture of it — banks of it drifting across the hollow — but it has to be here,
+ * because a night where the lanterns quietly cover half as much road and nothing on
+ * screen explains why is a night that reads as a bug.
+ *
+ * A gust runs a hard streak across the board a beat before the lanterns go out, so the
+ * player sees the cause and not just the effect.
+ */
+export class Weather {
+  readonly container = new Container()
+
+  private banks: { x: number; y: number; w: number; h: number; v: number; a: number }[] = []
+  private gfx = new Graphics()
+  private gustGfx = new Graphics()
+  private width: number
+  /** Seconds left in the visible sweep of a gust. */
+  private gust = 0
+  private gustX = 0
+  private density = 0
+
+  constructor(width: number, height: number, count = 14) {
+    this.width = width
+    this.container.addChild(this.gfx, this.gustGfx)
+
+    for (let i = 0; i < count; i++) {
+      this.banks.push({
+        x: Math.random() * width,
+        y: 150 + Math.random() * (height - 150),
+        w: 180 + Math.random() * 260,
+        h: 26 + Math.random() * 48,
+        v: 6 + Math.random() * 14,
+        a: 0.4 + Math.random() * 0.6,
+      })
+    }
+  }
+
+  /** Called when the wind actually takes the lanterns. */
+  blow() {
+    this.gust = 1.1
+    this.gustX = -160
+  }
+
+  update(dt: number, density: number) {
+    this.density += (density - this.density) * Math.min(1, dt * 2)
+
+    this.gfx.clear()
+    if (this.density > 0.01) {
+      for (const b of this.banks) {
+        b.x += b.v * dt * (1 + this.gust * 6)
+        if (b.x - b.w > this.width) b.x = -b.w
+        this.gfx
+          .ellipse(b.x, b.y, b.w / 2, b.h / 2)
+          .fill({ color: 0x8ea3ad, alpha: 0.05 * b.a * this.density })
+      }
+    }
+
+    this.gustGfx.clear()
+    if (this.gust <= 0) return
+
+    this.gust = Math.max(0, this.gust - dt)
+    this.gustX += dt * 1900
+
+    // Streaks of driven air, brightest at the leading edge.
+    for (let i = 0; i < 22; i++) {
+      const y = 120 + ((i * 97) % 560)
+      const x = this.gustX - (i % 5) * 60
+      this.gustGfx
+        .moveTo(x, y)
+        .lineTo(x - 70 - (i % 4) * 30, y + 6)
+        .stroke({ width: 1.4, color: 0xd8e6ea, alpha: 0.16 * this.gust })
+    }
+  }
+}
+
+/**
  * Hit and kill feedback. Analog, not arithmetic — the consult doc's call, and the
  * horror tone agrees: no damage numbers, just embers and light.
  */

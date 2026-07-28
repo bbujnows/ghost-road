@@ -24,8 +24,24 @@ export const BAND_LIT = 0.35
  * same lantern delivers lit to 127px and visible to 139px: authored ≈ delivered.
  */
 export const FALLOFF_CORE = 0.6
-/** L is multiplied by (1 − FOG_PENALTY × fogDensity). */
-export const FOG_PENALTY = 0.5
+/**
+ * §2.2 fog. **Fog shrinks a light's radius; it does not dim it.**
+ *
+ * The doc specified a flat multiplier on L and, measured, that turned out to be pure
+ * scenery: the falloff core is flat at 1.0, so scaling the total only bites at the
+ * fringe. At the doc's own Night 7 density of 0.9 a lantern's lit reach went from 102px
+ * to **91px** — an 11% haircut on the night the road is supposed to be unnavigable.
+ *
+ * This is the third time flat-core has hollowed out a threshold-based lever (see also
+ * lantern intensity and Graveyard Iron's Dim tier). Radius is the only thing that is
+ * felt. Under the numbers below, fog 0.9 cuts the lit pool to **50px, half a clear
+ * night**, which is what the design always meant.
+ *
+ * Ambient is deliberately not scaled: fog does not make the dark darker, it makes the
+ * lights smaller.
+ */
+export const FOG_RADIUS_PENALTY = 0.55
+export const FOG_INTENSITY_PENALTY = 0.25
 
 // ─── §5 Wards: Lantern Post ─────────────────────────────────────────────────
 
@@ -267,6 +283,10 @@ export const PORCH_DAMAGE = {
   crawler: 5,
   tallowMan: 12,
   boneDog: 6,
+  unseen: 7,
+  bellWitch: 25,
+  greenbrier: 10,
+  drover: 40,
 } as const
 
 // ─── §9 The ball stash economy ──────────────────────────────────────────────
@@ -276,7 +296,6 @@ export const PORCH_DAMAGE = {
 /** Guaranteed, paid when a wave is cleared. The worst-case player can still build. */
 export const OIL_PER_WAVE = 25
 export const OIL_PER_LIT_KILL = 4
-export const NIGHT_1_STARTING_OIL = 75
 
 // ─── §6 Enemy roster ────────────────────────────────────────────────────────
 
@@ -375,6 +394,88 @@ export const BONE_DOG = {
   biteInterval: 0.9,
 } as const
 
+/**
+ * The Unseen (§6). "Alpha `0.06 + 0.94 × L`. Genuinely invisible in the dark."
+ *
+ * It keeps the hard rule — below Dim it is not drawn at all, like everything else — but
+ * above it the doc's curve makes it consistently ghostlier than a walker at the same
+ * illumination: 0.20 against 0.50 at the Dim line, 0.53 against 0.94 in good light. It is
+ * never quite *there*. Kara's ears are the reliable way to know it is coming, which is
+ * why Night 3 pairs it with the boss that makes her ears lie.
+ */
+export const UNSEEN = {
+  hp: 38,
+  speed: 34,
+  radius: 9,
+} as const
+
+// ─── §6 Bosses (nights 3, 5, 7 — consult §7) ────────────────────────────────
+//
+// Every boss carries a **faint self-light**, strong enough to hold itself at Dim and no
+// stronger. So a boss is always visible and never killable on its own terms: you can see
+// exactly what is coming and still have to light it properly to touch it. A boss the
+// player cannot see is unfair; one that lights its own grave is not a boss.
+
+export const BOSS_GLOW = { intensity: 0.12, radius: 70 } as const
+
+/**
+ * The Bell Witch (Night 3). She attacks your instruments rather than your homestead.
+ *
+ * While she is alive, **Kara perks at things that are not there** — the false-positive
+ * mechanic §3.2 reserves for Night 5, brought forward and given an author. The player's
+ * most reliable read becomes unreliable on the same night the Unseen arrives, which is
+ * the whole point of the pairing.
+ */
+export const BELL_WITCH = {
+  hp: 260,
+  speed: 20,
+  radius: 14,
+  /** Seconds between phantom threats planted in Kara's hearing. */
+  lieInterval: 4.5,
+  /** How long each phantom lingers. */
+  lieDuration: 2.6,
+} as const
+
+/**
+ * The Greenbrier Ghost (Night 5). Real West Virginia folklore — Zona Heaster Shue, 1897,
+ * whose mother's testimony about her daughter's broken neck convicted a man. She is used
+ * here because she is settler history rather than living sacred tradition (§12.2).
+ *
+ * §6: "She does not attack. She *walks*, and everything she passes rises behind her. Kill
+ * the walker, not the risen." Her porch damage is nominal; the flood is the threat, and
+ * killing the risen instead of her is the mistake the fight is built to punish.
+ */
+export const GREENBRIER = {
+  hp: 220,
+  speed: 26,
+  radius: 12,
+  /** Seconds between one more thing standing up behind her. */
+  raiseInterval: 2.4,
+} as const
+
+/**
+ * The Drover (Night 7). He leads the whole hollow's dead down the road at once.
+ *
+ * The same raising verb as the Greenbrier Ghost, twice as fast and on a body twice as
+ * hard, at the end of the only night where fog has halved every lantern you own.
+ */
+export const DROVER = {
+  hp: 400,
+  speed: 18,
+  radius: 15,
+  raiseInterval: 1.3,
+} as const
+
+/**
+ * Wind (Night 5+). A gust puts out every lantern that is not Storm Glass, for as long as
+ * a Tallow Man's snuff would — and Storm Glass resists it on exactly the same scale.
+ *
+ * This is what the Storm branch was for. Until it existed the branch was insurance
+ * against a single enemy and looked strictly worse than Mirror Back; from Night 5 it is
+ * the difference between a lit road and a dark one every twenty seconds.
+ */
+export const GUST = { duration: 5, warning: 1.6 } as const
+
 // ─── Session ────────────────────────────────────────────────────────────────
 
 /** Fast-forward multiplier. Near-universal in the genre; toggled with F. */
@@ -469,7 +570,15 @@ export const BUBBLES = {
 /** §11: 3 waves, 55–70s each, 12s between. Counts are first-pass tuning. */
 export const WAVE_BREAK = 12
 
-export type EnemyKind = 'walker' | 'crawler' | 'boneDog' | 'tallowMan'
+export type EnemyKind =
+  | 'walker'
+  | 'crawler'
+  | 'boneDog'
+  | 'tallowMan'
+  | 'unseen'
+  | 'bellWitch'
+  | 'greenbrier'
+  | 'drover'
 
 export interface Group {
   kind: EnemyKind
@@ -480,40 +589,5 @@ export interface Group {
   start: number
 }
 
-/**
- * ⚠ **Night 1 is currently a proving ground, not the shipping Night 1.**
- *
- * §6's night structure gives Night 1 Road Walkers and the Tallow Man as its boss, with
- * the Crawler on Night 2 and Bone Dogs on Night 3. Nights 2–7 are build-order step 7 and
- * do not exist, so every enemy written in the counterplay pass is folded into this one
- * night in order to be playable at all. The wave table below is a **test harness**;
- * restore it to walkers-plus-boss when step 7 lands.
- *
- * Pacing at the road's measured 1070px: wave 1 ≈ 56s, wave 2 ≈ 58s, wave 3 ≈ 83s (the
- * Tallow Man's 48.6s traverse is most of that tail). Night total ≈ 3:41 with breaks.
- */
-export const NIGHT_1_WAVES: { groups: Group[] }[] = [
-  // Teaches the baseline unchanged: light the road, lay iron in the light.
-  { groups: [{ kind: 'walker', count: 6, gap: 4.0, start: 0 }] },
-  // Teaches the clock. The crawler burst arrives while walkers still hold your attention.
-  {
-    groups: [
-      { kind: 'walker', count: 6, gap: 4.5, start: 0 },
-      { kind: 'crawler', count: 4, gap: 1.2, start: 14 },
-    ],
-  },
-  // Teaches Kara. Bone Dogs come for her, then the Tallow Man comes for the lanterns.
-  {
-    groups: [
-      { kind: 'walker', count: 6, gap: 4.0, start: 0 },
-      { kind: 'crawler', count: 5, gap: 1.0, start: 10 },
-      { kind: 'boneDog', count: 2, gap: 6, start: 20 },
-      { kind: 'tallowMan', count: 1, gap: 0, start: 34 },
-    ],
-  },
-]
-
-/** For the break banner: how many things the coming wave puts on the road. */
-export function waveSize(index: number): number {
-  return NIGHT_1_WAVES[index].groups.reduce((n, g) => n + g.count, 0)
-}
+// The wave tables live in `nights.ts` — one per night, seven of them. Starting oil, fog
+// and wind are per-night too, so NIGHT_1_STARTING_OIL went with them.

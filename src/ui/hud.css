@@ -508,3 +508,27 @@ kbd {
   font-size: 11px;
   color: #6c7a78;
 }
+
+/* Nights after the first carry a one-line briefing instead of the full rules. */
+.sheet-note {
+  margin: 0 0 20px;
+  padding: 14px 0;
+  border-top: 1px solid rgba(198, 214, 210, 0.1);
+  border-bottom: 1px solid rgba(198, 214, 210, 0.1);
+}
+
+.quiet {
+  pointer-events: auto;
+  display: block;
+  margin: 10px auto 0;
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  color: #6c7a78;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.quiet:hover {
+  color: #ff8f6b;
+}

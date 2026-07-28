@@ -4,7 +4,7 @@ An Appalachian folk-horror tower defense. Seven nights defending a homestead at 
 abandoned logging road. **Kara — a gold Labrador/pit mix with white paws, belly, and chest — is
 the centerpiece of the design, not a bonus unit.**
 
-## Status: build order steps 1–6 built
+## Status: build order steps 1–7 built (campaign spine)
 
 The roadmap in use is **§9 of [docs/redesign-consult.md](docs/redesign-consult.md)**, adopted
 2026-07-27, which supersedes §13 of the design doc.
@@ -12,18 +12,20 @@ The roadmap in use is **§9 of [docs/redesign-consult.md](docs/redesign-consult.
 Playable: the three light bands · the split roster (Lantern Posts give light and deal nothing, Cold
 Iron deals damage and only inside light) · the income floor · fast-forward · Kara's Send, Ear-Perk,
 Show Belly, Bubbles and Blanket, her HP and her Down state · the counterplay roster (Road Walker,
-Crawler, Tallow Man, Bone Dog) · ward upgrade branches · Night 1's three waves, lamp oil, homestead
-HP, Normal-mode retry.
+Crawler, Tallow Man, Bone Dog, The Unseen) · ward upgrade branches · **all seven nights** with
+bosses on 3/5/7, per-night fog and wind, and `localStorage` progress · lamp oil, homestead HP,
+Normal-mode retry.
 
-Next: **step 7** — Nights 2–7 and their bosses, and the toy loadout alongside them.
+Next: the **toy loadout** (design doc §4), then **step 8** — the Nightly Road and the procedural
+Long Road.
 
-Not built: the other wards (salt, bell, spring line, bottle tree, fiddler), the other enemies, fog,
-bond, stash, toys, nights 2–7, Hard mode, endless, audio. Do not add them ahead of the build order.
+Not built: the other wards (salt, bell, spring line, bottle tree, fiddler), the Drownd Girl, Hant
+Cat, Hollow Kin, Snallygaster and Fetch, bond, stash, toys, Hard mode, endless, audio. Do not add
+them ahead of the build order.
 
-**The toy loadout is deliberately deferred to step 7**, not skipped. A toy is chosen before a night
-and there is one night, so choosing among eight is choosing what to bring to the only room in the
-building — the same argument that held the Blanket back until the Bone Dog existed. See design doc
-§5.2.
+**Three bosses are blocked, not cut** — the Snallygaster needs aerial pathing, the Drownd Girl needs
+salt + water + a light-damage source, and the Fetch is deferred by the consult itself. They keep
+their designs and belong in the endless boss pool. See design doc §6.
 
 ⚠ **Night 1 is currently a proving ground, not the shipping Night 1.** Every enemy from the
 counterplay pass is folded into it so they can be played at all; the real Night 1 is walkers plus
@@ -88,7 +90,8 @@ src/game/
   balance.ts    every doc-specified number, each citing its section
   Game.ts       orchestrator — waves, oil, homestead HP, input, HUD state bridge
   lighting.ts   the lightmap, the three bands, lightAt() and radiusForThreshold()
-  enemies.ts    Enemy base class + RoadWalker, Crawler, TallowMan, BoneDog, Corpse
+  nights.ts     the seven nights — wave tables, fog, wind, starting oil
+  enemies.ts    Enemy and Boss base classes + the whole roster + Corpse
   wards.ts      Lantern (pure light, snuffable) and ColdIron (damage, only in light)
   kara.ts       her dual rig, her state machine, and every ability she has
   bubbles.ts    the drifting lights she chases
@@ -122,11 +125,13 @@ keeps a light on the cheaper circular path in both `lightAt()` and the render. `
 is identical to `falloffAt(d, r)`, so the oval reads the same curve at a normalised distance and
 nothing about the lighting model changed to support it.
 
-> **Flat-core falloff makes threshold-moving upgrades much weaker than they sound, and this has
-> caught two designs already.** Raising a lantern's intensity 0.85 → 1.0 moves its lit radius by
-> 1px. Dropping a ward's damage bar from Lit to Dim widens its killable ring by 20% of area, not the
-> doubling you would guess. **Anything that moves a radius is felt; anything that moves a threshold
-> mostly is not.** Measure before writing a number into a design.
+> **Flat-core falloff makes threshold-moving levers much weaker than they sound, and this has now
+> caught three designs.** Raising a lantern's intensity 0.85 → 1.0 moves its lit radius by 1px.
+> Dropping a ward's damage bar from Lit to Dim widens its killable ring by 20% of area, not the
+> doubling you would guess. And fog specified as a flat multiplier on `L` cut a lantern's reach by
+> 11% at the campaign's heaviest density — it was scenery, and now shrinks radius instead.
+> **Anything that moves a radius is felt; anything that moves a threshold mostly is not.** Measure
+> before writing a number into a design.
 
 ## Enemies
 

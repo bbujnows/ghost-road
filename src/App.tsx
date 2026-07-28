@@ -37,6 +37,7 @@ export default function App() {
   const toggleSpeed = useCallback(() => gameRef.current?.toggleSpeed(), [])
   const selectWard = useCallback((id: 'lantern' | 'iron') => gameRef.current?.selectWard(id), [])
   const buyUpgrade = useCallback((slot: number) => gameRef.current?.buyUpgrade(slot), [])
+  const restartCampaign = useCallback(() => gameRef.current?.restartCampaign(), [])
 
   return (
     <div className="app">
@@ -51,6 +52,7 @@ export default function App() {
           onToggleSpeed={toggleSpeed}
           onSelectWard={selectWard}
           onBuyUpgrade={buyUpgrade}
+          onRestartCampaign={restartCampaign}
         />
       </div>
     </div>

@@ -46,6 +46,23 @@ falls into.
 Ambient moonlight is `L = 0.08` everywhere — permanently below the Dark threshold. The moon is
 atmosphere, never a solution.
 
+### 2.2a Fog, corrected (2026-07-28)
+
+**Fog shrinks a light's radius; it does not dim it.** The original spec multiplied `L` by
+`1 − 0.5 × density`, and measured, that was pure scenery: the falloff core is flat at 1.0, so
+scaling the total only ever bites at the fringe. At **the doc's own Night 7 density of 0.9** a
+lantern's lit reach went from 102px to **91px** — an 11% haircut on the night the road is supposed
+to be unnavigable.
+
+Now: `radius × (1 − 0.55 × density)` and `intensity × (1 − 0.25 × density)`. Night 7's fog cuts the
+lit pool to **50px, half a clear night.** Ambient is deliberately not scaled — fog does not make
+the dark darker, it makes the lights smaller.
+
+> This is the **third** time flat-core falloff has hollowed out a threshold-based lever, after
+> lantern intensity and Graveyard Iron's Dim tier (§5.2). The rule is now explicit: **anything that
+> moves a radius is felt; anything that moves a threshold mostly is not.** Measure before writing a
+> number into a design.
+
 ### 2.2 Accumulation and falloff
 
 Per light source `i` at distance `d`, **flat-core falloff** (ruling 2026-07-27, replacing the
@@ -404,7 +421,19 @@ any instant with Space; auto-pauses on tab blur; state saves to `localStorage` a
 | **Crawler** | 22 | 62 px/s | 5 | — | ✅ |
 | **Tallow Man** | 90 | 22 px/s | 12 | light 50% *(inert)* | ✅ |
 | **Bone Dog** | 24 | 55 / 78 px/s | 6 | — | ✅ |
-| The Unseen · Drownd Girl · Hant Cat · Hollow Kin · The Fetch | — | — | — | — | ❌ |
+| **The Unseen** | 38 | 34 px/s | 7 | — | ✅ |
+| **Bell Witch** *(boss, N3)* | 260 | 20 px/s | 25 | — | ✅ |
+| **Greenbrier Ghost** *(boss, N5)* | 220 | 26 px/s | 10 | — | ✅ |
+| **The Drover** *(boss, N7)* | 400 | 18 px/s | 40 | — | ✅ |
+| Drownd Girl · Hant Cat · Hollow Kin · Snallygaster · The Fetch | — | — | — | — | ❌ |
+
+**Every boss carries a faint self-light** — `intensity 0.12, radius 70`, enough to hold itself at
+Dim and no more. So a boss is always visible and never killable on its own terms: you can watch
+exactly what is coming and still have to light it properly to touch it. A boss the player cannot
+see is unfair; one that lights its own grave is not a boss.
+
+Against a fully-upgraded strip: the Bell Witch and Greenbrier Ghost each need two clean passes,
+the Drover two on Rail Iron or three on Graveyard. None of them dies to one ward.
 
 ### The counterplay pass (2026-07-28)
 
@@ -429,15 +458,47 @@ the night permanently — she would beat him by standing still, which is the opp
 for. She saves *that* lamp; he goes and finds another. Following him down the line and spoiling each
 one is real, expensive micro and exactly the kind wanted.
 
-> ### ⚠ Night 1 is currently a proving ground
->
-> The night structure below gives Night 1 Road Walkers plus the Tallow Man as its boss, with the
-> Crawler arriving on Night 2 and Bone Dogs on Night 3. Nights 2–7 are build-order step 7 and do not
-> exist, so **every enemy written in the counterplay pass is folded into Night 1** to be playable at
-> all. Wave 1 is still walkers only and still teaches the baseline; waves 2 and 3 are a test
-> harness. Restore the shipping composition when step 7 lands.
->
-> Measured pacing: 55.7s / 58.2s / 82.6s uncontested, **3:40 for the night** including breaks.
+### The seven nights, as built (2026-07-28)
+
+Wave tables live in `src/game/nights.ts`. **Bosses land on 3, 5 and 7** — the consult's structure
+(§7), which supersedes the boss-every-night table below. Progress saves to `localStorage` after
+every wave, per §6.
+
+| N | Name | Adds | Fog | Oil | Wind | Boss | Bodies | Length |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | First Night | Road Walkers, and a Tallow Man to close | — | 75 | — | — | 25 | 3:38 |
+| 2 | Second Night | Crawlers | — | 85 | — | — | 36 | 3:33 |
+| 3 | Third Night | The Unseen | 0.15 | 95 | — | **Bell Witch** | 40 | 3:46 |
+| 4 | Fourth Night | Bone Dogs | 0.25 | 105 | — | — | 43 | 3:44 |
+| 5 | Fifth Night | Wind | 0.50 | 115 | 22s | **Greenbrier Ghost** | 48 | 3:35 |
+| 6 | Sixth Night | Oil scarcity | 0.60 | 60 | 26s | — | 58 | 4:15 |
+| 7 | Seventh Night | All of it | 0.80 | 130 | 18s | **The Drover** | 75 | 4:27 |
+
+Measured uncontested; every night is inside the five-minute budget, and the count of bodies runs
+25 → 75 across the campaign. Boss floods are on top of this — an unkilled Drover raises up to 45
+more and would push Night 7 past the budget, which is the correct pressure: killing him is how the
+night ends.
+
+**Ordering note, deliberate:** Night 3 pairs the Unseen with the Bell Witch, so **the one night you
+most need Kara's ears is the one night they lie to you.** Night 4 then puts the Bone Dog on the
+board and asks you to trust them again.
+
+**Night 5 is where Storm Glass stops being insurance.** Wind puts out every lantern that is not
+Storm Glass, on the same `snuff()` path and the same resistance scale as the Tallow Man. Until wind
+existed the branch was a hedge against one enemy and looked strictly worse than Mirror Back; from
+Night 5 it is the difference between a lit road and a dark one every twenty seconds.
+
+**Three bosses are not built, and are blocked rather than cut:**
+
+- **The Snallygaster** (was Night 2) needs aerial pathing — everything on the board follows the road
+  polyline or steers for the homestead, and nothing flies.
+- **The Drownd Girl** (was Night 4) needs salt, running water, and a light-damage source. Her whole
+  identity is "salt-immune, water-bound, killable only with light" and not one of those three exists.
+  Giving her a 75% iron resist instead would just be 4× HP wearing a costume.
+- **The Fetch** (was Night 6) is deferred by the consult itself (§9).
+
+They keep their folklore and their designs. The natural home for them is the endless Long Road's
+boss pool (step 8), where a boss that needs one specific system can wait for it.
 
 > **45 HP is tuned against the split roster** (consult §1-S5 target): Cold Iron deals ~56 per
 > pass (7 ticks × 8 over a 3.0s dwell on the 90px strip), so one lantern + one iron kills with

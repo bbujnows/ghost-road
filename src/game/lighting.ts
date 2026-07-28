@@ -1,6 +1,13 @@
 import { Container, Graphics, RenderTexture, Sprite, Texture } from 'pixi.js'
 import type { Renderer } from 'pixi.js'
-import { AMBIENT_LIGHT, BAND_DIM, BAND_LIT, FALLOFF_CORE, FOG_PENALTY } from './balance'
+import {
+  AMBIENT_LIGHT,
+  BAND_DIM,
+  BAND_LIT,
+  FALLOFF_CORE,
+  FOG_INTENSITY_PENALTY,
+  FOG_RADIUS_PENALTY,
+} from './balance'
 
 /**
  * The lightmap. See design-doc §2.
@@ -163,18 +170,32 @@ export class LightingSystem {
     if (i >= 0) this.lights.splice(i, 1)
   }
 
+  /** How much of a light's radius survives the fog. 1 on a clear night. */
+  get fogRadiusScale() {
+    return 1 - FOG_RADIUS_PENALTY * this.fogDensity
+  }
+
+  get fogIntensityScale() {
+    return 1 - FOG_INTENSITY_PENALTY * this.fogDensity
+  }
+
   /** §2.2. Illumination at a world point, 0..1, fog included. */
   lightAt(x: number, y: number): number {
+    // Ambient is not scaled: fog does not make the dark darker, it makes lights smaller.
     let total = AMBIENT_LIGHT
+    const rs = this.fogRadiusScale
+    const is = this.fogIntensityScale
 
     for (const l of this.lights) {
       const dx = x - l.x
       const dy = y - l.y
+      const intensity = l.intensity * is
 
       if (l.radiusY === undefined) {
+        const radius = l.radius * rs
         const d = Math.sqrt(dx * dx + dy * dy)
-        if (d >= l.radius) continue
-        total += l.intensity * falloffAt(d, l.radius)
+        if (d >= radius) continue
+        total += intensity * falloffAt(d, radius)
         continue
       }
 
@@ -185,14 +206,14 @@ export class LightingSystem {
       const a = l.angle ?? 0
       const cos = Math.cos(-a)
       const sin = Math.sin(-a)
-      const lx = (dx * cos - dy * sin) / l.radius
-      const ly = (dx * sin + dy * cos) / l.radiusY
+      const lx = (dx * cos - dy * sin) / (l.radius * rs)
+      const ly = (dx * sin + dy * cos) / (l.radiusY * rs)
       const n = Math.sqrt(lx * lx + ly * ly)
       if (n >= 1) continue
-      total += l.intensity * falloffAt(n, 1)
+      total += intensity * falloffAt(n, 1)
     }
 
-    return Math.min(1, total) * (1 - FOG_PENALTY * this.fogDensity)
+    return Math.min(1, total)
   }
 
   bandAt(x: number, y: number): Band {
@@ -221,14 +242,15 @@ export class LightingSystem {
       }
 
       const flicker = l.flicker ? 1 + Math.sin(this.time * 11 + i * 3.7) * l.flicker : 1
+      const rs = this.fogRadiusScale
 
       s.visible = true
       s.position.set(l.x, l.y)
-      s.width = l.radius * 2
-      s.height = (l.radiusY ?? l.radius) * 2
+      s.width = l.radius * rs * 2
+      s.height = (l.radiusY ?? l.radius) * rs * 2
       s.rotation = l.angle ?? 0
       s.tint = l.color
-      s.alpha = Math.max(0, Math.min(1, l.intensity * flicker * (1 - FOG_PENALTY * this.fogDensity)))
+      s.alpha = Math.max(0, Math.min(1, l.intensity * flicker * this.fogIntensityScale))
     }
 
     renderer.render({ container: this.lightLayer, target: this.texture, clear: true })

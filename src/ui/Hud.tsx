@@ -21,6 +21,16 @@ const CONTROLS = [
   { key: '?', label: 'Help' },
 ]
 
+/** Keyed by the night just finished, so the button names where you are going. */
+const NEXT_NIGHT: Record<number, string> = {
+  1: 'Second Night',
+  2: 'Third Night',
+  3: 'Fourth Night',
+  4: 'Fifth Night',
+  5: 'Sixth Night',
+  6: 'Seventh Night',
+}
+
 /** What she is doing, when it is something the player did not just ask for. */
 const KARA_STATE: Partial<Record<GameState['karaState'], string>> = {
   belly: 'on her back',
@@ -154,6 +164,7 @@ export interface HudProps {
   onToggleSpeed: () => void
   onSelectWard: (id: 'lantern' | 'iron') => void
   onBuyUpgrade: (slot: number) => void
+  onRestartCampaign: () => void
 }
 
 /**
@@ -267,6 +278,7 @@ export function Hud({
   onToggleSpeed,
   onSelectWard,
   onBuyUpgrade,
+  onRestartCampaign,
 }: HudProps) {
   if (!state) return null
 
@@ -276,10 +288,24 @@ export function Hud({
     <div className="hud">
       <div className="hud-top">
         <div className="panel">
-          <span className="label">First Night</span>
+          <span className="label">
+            {state.nightName} · {state.night}/{state.nightCount}
+          </span>
           <span className="value">
             Wave {state.wave} / {state.waveCount}
           </span>
+          {(state.fog > 0 || state.gustIn > 0) && (
+            <span className={`sub ${state.gustWarning ? 'blocked' : ''}`}>
+              {state.gustWarning
+                ? 'wind coming'
+                : [
+                    state.fog > 0 ? `fog ${Math.round(state.fog * 100)}%` : null,
+                    state.gustIn > 0 ? `gust ${Math.ceil(state.gustIn)}s` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+            </span>
+          )}
         </div>
 
         <div className="panel">
@@ -387,10 +413,19 @@ export function Hud({
       {state.phase === 'briefing' && (
         <div className="veil">
           <div className="sheet">
-            <p className="eyebrow">Ghost Road · First Night</p>
-            <h1>The road has been quiet for forty years.</h1>
-            <p className="lede">It is not quiet tonight.</p>
-            <Rules state={state} />
+            <p className="eyebrow">
+              Ghost Road · {state.nightName} · {state.night} of {state.nightCount}
+            </p>
+            <h1>{state.nightLede}</h1>
+            <p className="lede">{state.nightTeaches}</p>
+            {/* The full rules only on the First Night. After that the briefing is one
+                line about the one new thing, because re-reading eight rules to start a
+                four-minute night is how a desk-break game stops being one. */}
+            {state.night === 1 ? (
+              <Rules state={state} />
+            ) : (
+              <p className="footnote sheet-note">Press ? at any time for the full rules.</p>
+            )}
             <button type="button" className="primary" onClick={onBegin}>
               Hold the night
             </button>
@@ -419,6 +454,11 @@ export function Hud({
             <button type="button" className="primary" onClick={onToggleHelp}>
               Back to it
             </button>
+            {/* Progress persists across sessions, so there has to be a way to let it go.
+                Buried in the help sheet on purpose — it is not a thing to hit by accident. */}
+            <button type="button" className="quiet" onClick={onRestartCampaign}>
+              Start the seven nights over
+            </button>
           </div>
         </div>
       )}
@@ -437,7 +477,7 @@ export function Hud({
         <Curtain
           title="The hollow took the homestead."
           sub="Kara is fine. She always is."
-          action="Hold the night again"
+          action={`Hold the ${state.nightName.toLowerCase()} again`}
           hint="or press R"
           onAction={onRestart}
         />
@@ -445,9 +485,13 @@ export function Hud({
 
       {state.phase === 'complete' && (
         <Curtain
-          title="Dawn."
-          sub="She stayed on the porch all night."
-          action="Hold it again"
+          title={state.finalNight ? 'Seven nights. Dawn.' : 'Dawn.'}
+          sub={
+            state.finalNight
+              ? 'The road is quiet again. She stayed on the porch for every one of them.'
+              : 'She stayed on the porch all night.'
+          }
+          action={state.finalNight ? 'Walk it again' : `On to the ${NEXT_NIGHT[state.night] ?? 'next night'}`}
           hint="or press R"
           onAction={onRestart}
         />

@@ -6,22 +6,21 @@ import {
   COLD_IRON,
   EAR_PERK_LEAD,
   FAST_FORWARD,
+  GUST,
   HOMESTEAD_MAX_HP,
   KARA,
   LANTERN,
-  NIGHT_1_STARTING_OIL,
-  NIGHT_1_WAVES,
   OIL_PER_LIT_KILL,
   OIL_PER_WAVE,
   SHOW_BELLY,
   WAVE_BREAK,
-  waveSize,
 } from './balance'
+import { NIGHTS, waveSizeOf } from './nights'
 import { BRANCHES, BRANCHES_FOR } from './balance'
 import type { BranchId, EnemyKind, WardKind } from './balance'
-import { Bloom, Motes, Sparks, vignette } from './atmosphere'
+import { Bloom, Motes, Sparks, Weather, vignette } from './atmosphere'
 import { Bubble } from './bubbles'
-import { Corpse, spawn } from './enemies'
+import { Boss, Corpse, spawn } from './enemies'
 import type { Enemy, EnemyContext } from './enemies'
 import { Kara } from './kara'
 import type { KaraMode, Threat } from './kara'
@@ -62,6 +61,20 @@ export interface Selection {
 
 export interface GameState {
   phase: Phase
+  /** 1-based. */
+  night: number
+  nightCount: number
+  nightName: string
+  nightLede: string
+  /** The one new thing this night brings, for the briefing. */
+  nightTeaches: string
+  /** True on the last night, so the finish screen can mean something. */
+  finalNight: boolean
+  /** 0 on a clear night. */
+  fog: number
+  /** Seconds to the next gust, or 0 on a still night. */
+  gustIn: number
+  gustWarning: boolean
   wave: number
   waveCount: number
   homesteadHp: number
@@ -128,6 +141,7 @@ export class Game {
   private smoke!: Smoke
   private bloom!: Bloom
   private motes!: Motes
+  private weather!: Weather
   private enemies: Enemy[] = []
   private corpses: Corpse[] = []
   private lanterns: Lantern[] = []
@@ -143,12 +157,18 @@ export class Game {
 
   // Starts on the briefing so the player has time to read before anything walks.
   private phase: Phase = 'briefing'
+  private nightIndex = 0
   private waveIndex = 0
   private spawnQueue: { at: number; kind: EnemyKind }[] = []
   private elapsed = 0
   private breakTimer = 4
   private homesteadHp = HOMESTEAD_MAX_HP
-  private oil = NIGHT_1_STARTING_OIL
+  private oil = NIGHTS[0].startingOil
+
+  /** Seconds to the next gust. 0 on a still night. */
+  private gustTimer = 0
+  /** §3.2 false ear-perks. The Bell Witch plants these; they have no bodies. */
+  private phantoms: { x: number; y: number; until: number }[] = []
   private paused = false
   private helpOpen = false
   private speed: number = 1
@@ -226,7 +246,15 @@ export class Game {
     this.bloom.source.addChild(this.sparks.gfx)
 
     // Above the darkness overlay, so the player can see where the pool will land.
-    this.foreground.addChild(this.motes.container, this.highlight, this.preview)
+    // Fog sits above the darkness overlay with the motes: it is weather in front of the
+    // hollow, not paint on it.
+    this.weather = new Weather(WORLD_WIDTH, WORLD_HEIGHT)
+    this.foreground.addChild(
+      this.weather.container,
+      this.motes.container,
+      this.highlight,
+      this.preview,
+    )
 
     this.app.stage.addChild(
       this.scene,
@@ -235,6 +263,13 @@ export class Game {
       this.foreground,
       vignette(WORLD_WIDTH, WORLD_HEIGHT),
     )
+
+    // Pick up where they left off before the first frame runs, so fog and starting oil
+    // are the resumed night's and not the First Night's.
+    this.load()
+    this.oil = this.night.startingOil
+    this.lighting.fogDensity = this.night.fog
+    this.gustTimer = this.night.wind
 
     this.bindInput()
     this.app.ticker.add((ticker) => this.tick(Math.min(ticker.deltaMS / 1000, 0.05)))
@@ -400,9 +435,14 @@ export class Game {
     this.setPaused(false)
   }
 
-  /** Reachable from both a loss and a finished night. */
+  /**
+   * The one button on both end-of-night curtains. A loss replays the night; holding it
+   * moves you on. Same key, opposite meanings — which is right, because from the
+   * player's side it is always just "carry on".
+   */
   restart() {
-    this.retryNight()
+    if (this.phase === 'complete') this.nextNight()
+    else this.retryNight()
   }
 
   /** True while the board is frozen and clicks must not reach it. */
@@ -623,6 +663,37 @@ export class Game {
     g.rotation = ward.angle
   }
 
+  /** Put an enemy on the board. Bosses also hand their self-light to the lightmap. */
+  private add(enemy: Enemy) {
+    this.enemies.push(enemy)
+    this.scene.addChild(enemy.gfx)
+    if (enemy instanceof Boss) this.lighting.add(enemy.glow)
+  }
+
+  /** Something stands up on a stretch of road that has already been walked. */
+  private raise(kind: EnemyKind, pathT: number) {
+    const enemy = spawn(kind)
+    enemy.seek(pathT)
+    this.add(enemy)
+  }
+
+  /**
+   * §6 Night 5+. A gust puts out every lantern that is not Storm Glass — and Storm Glass
+   * resists it on exactly the scale it resists the Tallow Man, because it is the same
+   * `snuff()` call. This is what the branch was for: until wind existed it was insurance
+   * against one enemy and looked strictly worse than Mirror Back.
+   */
+  private blowWind(dt: number) {
+    if (!this.night.wind) return
+
+    this.gustTimer -= dt
+    if (this.gustTimer > 0) return
+
+    this.gustTimer = this.night.wind
+    this.weather.blow()
+    for (const lantern of this.lanterns) lantern.snuff(GUST.duration)
+  }
+
   private placeWard(x: number, y: number) {
     if (this.placementBlocker(x, y) !== null) return
 
@@ -643,9 +714,13 @@ export class Game {
     }
   }
 
+  private get night() {
+    return NIGHTS[this.nightIndex]
+  }
+
   private queueWave(index: number) {
     this.spawnQueue = []
-    for (const group of NIGHT_1_WAVES[index].groups) {
+    for (const group of this.night.waves[index].groups) {
       for (let i = 0; i < group.count; i++) {
         this.spawnQueue.push({ at: this.elapsed + group.start + i * group.gap, kind: group.kind })
       }
@@ -656,16 +731,24 @@ export class Game {
     this.phase = 'wave'
   }
 
-  /** §7.1 Normal: replay the night from wave 1. Oil and wards reset with it. */
+  /**
+   * §7.1 Normal: replay the current night from wave 1. Oil and wards reset with it.
+   *
+   * This is also how the *next* night starts — a night is a night, and there is nothing
+   * to carry across but the number. When stash and bond land they will be the exception
+   * and will have to be threaded through here deliberately.
+   */
   private retryNight() {
     // Before anything is destroyed — a selection pointing at a freed ward is a crash.
     this.selected = null
 
     for (const e of this.enemies) {
+      if (e instanceof Boss) this.lighting.remove(e.glow)
       this.scene.removeChild(e.gfx)
       e.gfx.destroy({ children: true })
     }
     this.enemies = []
+    this.phantoms = []
 
     for (const c of this.corpses) {
       this.scene.removeChild(c.gfx)
@@ -698,13 +781,63 @@ export class Game {
     this.kara.reset(HOMESTEAD.x - 175, HOMESTEAD.y + 48)
 
     this.homesteadHp = HOMESTEAD_MAX_HP
-    this.oil = NIGHT_1_STARTING_OIL
+    this.oil = this.night.startingOil
+    this.lighting.fogDensity = this.night.fog
+    this.gustTimer = this.night.wind
     this.waveIndex = 0
     this.spawnQueue = []
     this.breakTimer = 4
-    this.phase = 'break'
+    // Straight back to the briefing: every night after the first introduces something,
+    // and dropping the player into it unread is how a system gets blamed on the game.
+    this.phase = 'briefing'
     this.paused = false
     this.helpOpen = false
+  }
+
+  /** Advance to the next night, or finish the campaign. */
+  private nextNight() {
+    if (this.nightIndex >= NIGHTS.length - 1) {
+      // Nothing after the seventh. Endless is build-order step 8.
+      this.nightIndex = 0
+    } else {
+      this.nightIndex += 1
+    }
+    this.save()
+    this.retryNight()
+  }
+
+  private static readonly SAVE_KEY = 'ghost-road/progress'
+
+  private save() {
+    try {
+      localStorage.setItem(
+        Game.SAVE_KEY,
+        JSON.stringify({ night: this.nightIndex, wave: this.waveIndex }),
+      )
+    } catch {
+      // Private browsing, a full quota, a locked-down work machine. Losing the save is
+      // survivable; taking the game down with it is not.
+    }
+  }
+
+  private load() {
+    try {
+      const raw = localStorage.getItem(Game.SAVE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as { night?: unknown }
+      const n = typeof parsed.night === 'number' ? parsed.night : 0
+      // Clamp rather than trust: the file is user-editable and the roster is not.
+      this.nightIndex = Math.max(0, Math.min(NIGHTS.length - 1, Math.floor(n)))
+    } catch {
+      this.nightIndex = 0
+    }
+  }
+
+  /** Wipes progress and starts over at the First Night. */
+  restartCampaign() {
+    this.nightIndex = 0
+    this.save()
+    this.retryNight()
   }
 
   private tick(dt: number) {
@@ -736,10 +869,10 @@ export class Game {
 
     while (this.spawnQueue.length && this.spawnQueue[0].at <= this.elapsed) {
       const next = this.spawnQueue.shift()!
-      const enemy = spawn(next.kind)
-      this.enemies.push(enemy)
-      this.scene.addChild(enemy.gfx)
+      this.add(spawn(next.kind))
     }
+
+    this.blowWind(dt)
 
     for (const lantern of this.lanterns) lantern.animate(dt)
 
@@ -756,6 +889,10 @@ export class Game {
       lighting: this.lighting,
       kara: this.kara,
       lanterns: this.lanterns,
+      raise: (kind, pathT) => this.raise(kind, pathT),
+      lie: (x, y, seconds) => {
+        this.phantoms.push({ x, y, until: this.elapsed + seconds })
+      },
     }
 
     for (const enemy of this.enemies) {
@@ -775,6 +912,8 @@ export class Game {
         survivors.push(enemy)
         continue
       }
+      // A boss stops lighting the road the moment it goes down, either way it went.
+      if (enemy instanceof Boss) this.lighting.remove(enemy.glow)
       if (enemy.arrived) {
         this.scene.removeChild(enemy.gfx)
         enemy.gfx.destroy({ children: true })
@@ -803,17 +942,23 @@ export class Game {
       // bad wave 1 turns the rest of the night into a slow bleed.
       this.kara.rest(KARA.healPerWave)
       this.waveIndex++
-      if (this.waveIndex >= NIGHT_1_WAVES.length) {
+      if (this.waveIndex >= this.night.waves.length) {
         this.phase = 'complete'
       } else {
         this.breakTimer = WAVE_BREAK
         this.phase = 'break'
       }
+      // §6: state saves after every wave. It is a game played in short breaks; losing
+      // your place because a tab closed is the one failure that has nothing to do with
+      // the hollow.
+      this.save()
     }
 
     // What Kara can hear. `soonVisible` asks where each walker will be in
     // EAR_PERK_LEAD seconds and whether the light will have reached it by then — that
     // lookahead is the whole reason her ears mean anything.
+    this.phantoms = this.phantoms.filter((p) => p.until > this.elapsed)
+
     const threats: Threat[] = this.enemies.map((w) => {
       const ahead = w.futurePosition(EAR_PERK_LEAD)
       return {
@@ -823,6 +968,13 @@ export class Game {
         soonVisible: this.lighting.lightAt(ahead.x, ahead.y) >= BAND_DIM,
       }
     })
+
+    // The Bell Witch's phantoms enter Kara's hearing as ordinary threats: invisible now,
+    // about to be visible. She has no way to tell them from the real thing, and neither
+    // does the player — which is the entire attack.
+    for (const p of this.phantoms) {
+      threats.push({ x: p.x, y: p.y, visible: false, soonVisible: true })
+    }
 
     this.kara.update(dt, this.lighting, threats)
 
@@ -848,6 +1000,7 @@ export class Game {
   /** Lightmap, bloom, motes, sparks, placement preview — the passes that run every frame. */
   private renderPasses(dt: number) {
     this.lighting.update(this.app.renderer, dt)
+    this.weather.update(dt, this.night.fog)
     this.motes.update(dt, (x, y) => this.lighting.lightAt(x, y))
     this.sparks.update(dt)
     this.bloom.update(this.app.renderer)
@@ -858,10 +1011,21 @@ export class Game {
     if (!this.stateHandler) return
     const L = this.lighting.lightAt(this.pointer.x, this.pointer.y)
 
+    const night = this.night
+
     this.stateHandler({
       phase: this.phase,
-      wave: Math.min(this.waveIndex + 1, NIGHT_1_WAVES.length),
-      waveCount: NIGHT_1_WAVES.length,
+      night: night.n,
+      nightCount: NIGHTS.length,
+      nightName: night.name,
+      nightLede: night.lede,
+      nightTeaches: night.teaches,
+      finalNight: this.nightIndex === NIGHTS.length - 1,
+      fog: night.fog,
+      gustIn: night.wind ? Math.max(0, this.gustTimer) : 0,
+      gustWarning: night.wind > 0 && this.gustTimer > 0 && this.gustTimer <= GUST.warning,
+      wave: Math.min(this.waveIndex + 1, night.waves.length),
+      waveCount: night.waves.length,
       homesteadHp: Math.max(0, this.homesteadHp),
       homesteadMaxHp: HOMESTEAD_MAX_HP,
       oil: Math.floor(this.oil),
@@ -883,8 +1047,8 @@ export class Game {
       lanternsOut: this.lanterns.filter((l) => l.snuffed).length,
       relightIn: this.lanterns.reduce((m, l) => Math.max(m, l.relightIn), 0),
       nextWaveCount:
-        this.phase === 'break' && this.waveIndex < NIGHT_1_WAVES.length
-          ? waveSize(this.waveIndex)
+        this.phase === 'break' && this.waveIndex < night.waves.length
+          ? waveSizeOf(this.nightIndex, this.waveIndex)
           : 0,
       lightUnderCursor: L,
       bandUnderCursor: bandOf(L),
