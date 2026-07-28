@@ -17,14 +17,15 @@ import {
   WAVE_BREAK,
   waveSize,
 } from './balance'
-import type { EnemyKind } from './balance'
+import { BRANCHES, BRANCHES_FOR } from './balance'
+import type { BranchId, EnemyKind, WardKind } from './balance'
 import { Bloom, Motes, Sparks, vignette } from './atmosphere'
 import { Bubble } from './bubbles'
 import { Corpse, spawn } from './enemies'
 import type { Enemy, EnemyContext } from './enemies'
 import { Kara } from './kara'
 import type { KaraMode, Threat } from './kara'
-import { LightingSystem, bandOf, radiusForThreshold } from './lighting'
+import { LightingSystem, bandOf, reachFraction } from './lighting'
 import type { Band, Light } from './lighting'
 import { ColdIron, Lantern } from './wards'
 import { HOMESTEAD, ROAD, buildScene } from './world'
@@ -34,7 +35,30 @@ export const WORLD_WIDTH = 1280
 export const WORLD_HEIGHT = 720
 
 export type Phase = 'briefing' | 'wave' | 'break' | 'failed' | 'complete'
-export type WardId = 'lantern' | 'iron'
+export type WardId = WardKind
+
+/** One branch of the selected ward, as the HUD needs to draw it. */
+export interface BranchOption {
+  id: BranchId
+  name: string
+  role: string
+  /** How many tiers are already bought, 0–2. */
+  tier: number
+  maxTier: number
+  cost: number
+  /** What the next tier does, or the last one bought if it is maxed. */
+  note: string
+  /** False when the other branch was taken, or this one is maxed, or oil is short. */
+  affordable: boolean
+  open: boolean
+}
+
+export interface Selection {
+  kind: WardKind
+  x: number
+  y: number
+  branches: BranchOption[]
+}
 
 export interface GameState {
   phase: Phase
@@ -76,6 +100,8 @@ export interface GameState {
   /** Radii the player actually gets, which are not the lantern's nominal radius. */
   litRadius: number
   dimRadius: number
+  /** The placed ward the player has clicked, or null. */
+  selection: Selection | null
 }
 
 /**
@@ -110,6 +136,10 @@ export class Game {
   private bellyLight!: Light
   private selectedWard: WardId = 'lantern'
   private preview = new Graphics()
+  /** Separate from the preview: this one carries a transform, that one does not. */
+  private highlight = new Graphics()
+  /** The placed ward under inspection. Cleared the moment one is placed or destroyed. */
+  private selected: Lantern | ColdIron | null = null
 
   // Starts on the briefing so the player has time to read before anything walks.
   private phase: Phase = 'briefing'
@@ -196,7 +226,7 @@ export class Game {
     this.bloom.source.addChild(this.sparks.gfx)
 
     // Above the darkness overlay, so the player can see where the pool will land.
-    this.foreground.addChild(this.motes.container, this.preview)
+    this.foreground.addChild(this.motes.container, this.highlight, this.preview)
 
     this.app.stage.addChild(
       this.scene,
@@ -234,8 +264,19 @@ export class Game {
     const onDown = (e: MouseEvent) => {
       if (this.inputLocked) return
       const p = toWorld(e)
-      if (e.button === 2) this.kara.moveTo(p.x, p.y)
-      else this.placeWard(p.x, p.y)
+      if (e.button === 2) {
+        this.kara.moveTo(p.x, p.y)
+        return
+      }
+      // The cursor is either over a ward you own or it is not, so a left click is never
+      // ambiguous: on one, it selects it; anywhere else, it builds and clears the
+      // selection. No modal state, and no click that does nothing.
+      const hit = this.wardAt(p.x, p.y)
+      if (hit) this.selected = hit
+      else {
+        this.selected = null
+        this.placeWard(p.x, p.y)
+      }
     }
     const onContext = (e: Event) => e.preventDefault()
     const onKey = (e: KeyboardEvent) => {
@@ -266,9 +307,13 @@ export class Game {
         this.toggleSpeed()
       } else if (key === '?' || key === '/' || key === 'h') {
         this.toggleHelp()
+      } else if (key === 'q' || key === 'e') {
+        // The two branches of whatever is selected, left and right.
+        this.buyUpgrade(key === 'q' ? 0 : 1)
       } else if (key === 'escape') {
         // Escape always means "get me out of this overlay".
         if (this.helpOpen || this.paused) this.resume()
+        else this.selected = null
       } else if (key === 'r' && (this.phase === 'failed' || this.phase === 'complete')) {
         this.restart()
       }
@@ -369,6 +414,71 @@ export class Game {
     this.selectedWard = id
   }
 
+  /** The placed ward under a point, lanterns first — their lamps sit above the road. */
+  private wardAt(x: number, y: number): Lantern | ColdIron | null {
+    for (const l of this.lanterns) if (l.contains(x, y)) return l
+    for (const s of this.irons) if (s.contains(x, y)) return s
+    return null
+  }
+
+  private get selectedKind(): WardKind | null {
+    if (!this.selected) return null
+    return this.selected instanceof Lantern ? 'lantern' : 'iron'
+  }
+
+  /**
+   * Buy a tier on the selected ward. `slot` is 0 or 1 — which of the two branches, in
+   * the order the HUD lists them — so the caller never has to know a branch id.
+   *
+   * Cost comes back from the ward rather than being looked up here: `upgrade()` returns
+   * 0 when the branch is closed or maxed, which is the one place that rule lives. Paying
+   * from a separately-read price would let the two drift and charge for nothing.
+   */
+  buyUpgrade(slot: number) {
+    if (this.inputLocked) return
+    const kind = this.selectedKind
+    if (!this.selected || !kind) return
+
+    const id = BRANCHES_FOR[kind][slot === 0 ? 0 : 1]
+    if (!this.selected.upgrades.canTake(id)) return
+    if (this.oil < this.selected.upgrades.nextCost(id)) return
+
+    this.oil -= this.selected.upgrade(id)
+  }
+
+  /** What the HUD draws for the selected ward, or null when nothing is selected. */
+  private describeSelection(): Selection | null {
+    const kind = this.selectedKind
+    if (!this.selected || !kind) return null
+
+    const ward = this.selected
+    const branches: BranchOption[] = BRANCHES_FOR[kind].map((id) => {
+      const def = BRANCHES[id]
+      const tier = ward.upgrades.branch === id ? ward.upgrades.tier : 0
+      const open = ward.upgrades.canTake(id)
+      const cost = ward.upgrades.nextCost(id)
+      // Show what you are about to buy — or, if this branch is finished, what you
+      // bought. A branch closed because the *other* one was taken still describes its
+      // first tier: that is the road not taken, and it should say what it would have been.
+      const maxed = ward.upgrades.branch === id && tier >= def.tiers.length
+      const shown = def.tiers[maxed ? def.tiers.length - 1 : tier]
+
+      return {
+        id,
+        name: def.name,
+        role: def.role,
+        tier,
+        maxTier: def.tiers.length,
+        cost,
+        note: shown.note,
+        open,
+        affordable: open && this.oil >= cost,
+      }
+    })
+
+    return { kind, x: ward.x, y: ward.y, branches }
+  }
+
   /** The angle of the road segment nearest a point — iron lies along the road bed. */
   private roadAngleAt(x: number, y: number): number {
     let best = Infinity
@@ -429,11 +539,17 @@ export class Game {
     if (this.phase === 'briefing' || this.phase === 'failed' || this.phase === 'complete') return
     if (this.paused) return
 
+    this.drawSelection()
+
+    // Over one of your own wards the click selects rather than builds, so showing a
+    // placement ghost there would be a lie about what the next click does.
+    if (this.wardAt(x, y)) return
+
     const blocked = this.placementBlocker(x, y) !== null
 
     if (this.selectedWard === 'lantern') {
-      const litR = radiusForThreshold(LANTERN, BAND_LIT)
-      const dimR = radiusForThreshold(LANTERN, BAND_DIM)
+      const litR = LANTERN.radius * reachFraction(LANTERN.intensity, BAND_LIT)
+      const dimR = LANTERN.radius * reachFraction(LANTERN.intensity, BAND_DIM)
       const color = blocked ? 0xff8f6b : 0xffc078
 
       this.preview
@@ -468,13 +584,55 @@ export class Game {
     }
   }
 
+  /**
+   * The selected ward's real footprint — the actual lit ellipse for a lantern, the
+   * actual strip for iron. Drawn from the live objects rather than from the base
+   * constants, so an upgraded ward shows the player exactly what they bought.
+   *
+   * It has its own Graphics because a rotated oval is drawn at the origin and placed by
+   * transform, and the placement ghost is drawn in world coordinates — sharing one
+   * object would drag the ghost across the map with it.
+   */
+  private drawSelection() {
+    const g = this.highlight.clear()
+    g.position.set(0, 0)
+    g.rotation = 0
+
+    const ward = this.selected
+    if (!ward) return
+
+    const gold = 0xffc078
+
+    if (ward instanceof Lantern) {
+      const k = reachFraction(LANTERN.intensity, BAND_LIT)
+      const rx = ward.light.radius * k
+      const ry = (ward.light.radiusY ?? ward.light.radius) * k
+      g.ellipse(0, 0, rx, ry)
+        .fill({ color: gold, alpha: 0.05 })
+        .ellipse(0, 0, rx, ry)
+        .stroke({ width: 1.5, color: gold, alpha: 0.55 })
+      g.position.set(ward.x, ward.y)
+      g.rotation = ward.light.angle ?? 0
+      return
+    }
+
+    const hl = ward.length / 2
+    const hw = COLD_IRON.width / 2
+    g.rect(-hl, -hw, ward.length, COLD_IRON.width).stroke({ width: 2, color: gold, alpha: 0.7 })
+    g.position.set(ward.x, ward.y)
+    g.rotation = ward.angle
+  }
+
   private placeWard(x: number, y: number) {
     if (this.placementBlocker(x, y) !== null) return
 
     this.oil -= this.wardCost(this.selectedWard)
 
     if (this.selectedWard === 'lantern') {
-      const lantern = new Lantern(x, y, this.lighting)
+      // The road angle is baked in at placement so a later Mirror Back throws its oval
+      // down the road rather than across it. A lantern that has to be re-aimed after
+      // upgrading would be a puzzle about the UI, not about the road.
+      const lantern = new Lantern(x, y, this.roadAngleAt(x, y), this.lighting)
       this.lanterns.push(lantern)
       this.scene.addChild(lantern.gfx)
       this.bloom.source.addChild(lantern.emissive)
@@ -500,6 +658,9 @@ export class Game {
 
   /** §7.1 Normal: replay the night from wave 1. Oil and wards reset with it. */
   private retryNight() {
+    // Before anything is destroyed — a selection pointing at a freed ward is a crash.
+    this.selected = null
+
     for (const e of this.enemies) {
       this.scene.removeChild(e.gfx)
       e.gfx.destroy({ children: true })
@@ -730,8 +891,9 @@ export class Game {
       placementBlocker: this.placementBlocker(this.pointer.x, this.pointer.y),
       lanternCost: LANTERN.cost,
       ironCost: COLD_IRON.cost,
-      litRadius: radiusForThreshold(LANTERN, BAND_LIT),
-      dimRadius: radiusForThreshold(LANTERN, BAND_DIM),
+      litRadius: LANTERN.radius * reachFraction(LANTERN.intensity, BAND_LIT),
+      dimRadius: LANTERN.radius * reachFraction(LANTERN.intensity, BAND_DIM),
+      selection: this.describeSelection(),
     })
   }
 

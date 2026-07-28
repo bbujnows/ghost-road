@@ -21,6 +21,14 @@ export interface Light {
   color: number
   intensity: number
   flicker?: number
+  /**
+   * Radius across the light's own axis. Omitted means circular. A Mirror Back lantern
+   * throws an oval down the road, which covers more *road* for the same lamp — the
+   * upgrade only means anything if the lightmap can actually be non-circular.
+   */
+  radiusY?: number
+  /** Rotation of the oval, radians. Ignored when radiusY is omitted. */
+  angle?: number
 }
 
 /**
@@ -50,24 +58,32 @@ export function falloffAt(d: number, radius: number): number {
 }
 
 /**
- * The distance at which a single light on its own falls to `threshold`. Inverts
- * `falloffAt` by bisection. Under flat-core the delivered radii sit close to the
- * authored one (lit ~85% of radius for a lantern) — but the placement preview still
- * draws these, never the raw radius, so the promise stays honest if tuning changes.
+ * The fraction of a light's radius at which it falls to `threshold`. Inverts `falloffAt`
+ * by bisection on the normalised curve, so it applies to each axis of an oval equally.
  */
-export function radiusForThreshold(light: Pick<Light, 'radius' | 'intensity'>, threshold: number): number {
-  const needed = (threshold - AMBIENT_LIGHT) / light.intensity
-  if (needed <= 0) return light.radius
+export function reachFraction(intensity: number, threshold: number): number {
+  const needed = (threshold - AMBIENT_LIGHT) / intensity
+  if (needed <= 0) return 1
   if (needed > 1) return 0
 
   let lo = 0
-  let hi = light.radius
+  let hi = 1
   for (let i = 0; i < 40; i++) {
     const mid = (lo + hi) / 2
-    if (falloffAt(mid, light.radius) > needed) lo = mid
+    if (falloffAt(mid, 1) > needed) lo = mid
     else hi = mid
   }
   return (lo + hi) / 2
+}
+
+/**
+ * The distance at which a single light on its own falls to `threshold`. Under flat-core
+ * the delivered radii sit close to the authored one (lit ~85% of radius for a lantern) —
+ * but everything player-facing still draws these, never the raw radius, so the promise
+ * stays honest if tuning changes.
+ */
+export function radiusForThreshold(light: Pick<Light, 'radius' | 'intensity'>, threshold: number): number {
+  return light.radius * reachFraction(light.intensity, threshold)
 }
 
 /**
@@ -154,9 +170,26 @@ export class LightingSystem {
     for (const l of this.lights) {
       const dx = x - l.x
       const dy = y - l.y
-      const d = Math.sqrt(dx * dx + dy * dy)
-      if (d >= l.radius) continue
-      total += l.intensity * falloffAt(d, l.radius)
+
+      if (l.radiusY === undefined) {
+        const d = Math.sqrt(dx * dx + dy * dy)
+        if (d >= l.radius) continue
+        total += l.intensity * falloffAt(d, l.radius)
+        continue
+      }
+
+      // Oval: rotate into the light's own frame, then normalise each axis. The falloff
+      // curve is the same one, read at the normalised distance — `falloffAt(d/r, 1)` is
+      // identical to `falloffAt(d, r)`, so a circle is just the case where both radii
+      // agree and nothing about the lighting model has changed.
+      const a = l.angle ?? 0
+      const cos = Math.cos(-a)
+      const sin = Math.sin(-a)
+      const lx = (dx * cos - dy * sin) / l.radius
+      const ly = (dx * sin + dy * cos) / l.radiusY
+      const n = Math.sqrt(lx * lx + ly * ly)
+      if (n >= 1) continue
+      total += l.intensity * falloffAt(n, 1)
     }
 
     return Math.min(1, total) * (1 - FOG_PENALTY * this.fogDensity)
@@ -192,7 +225,8 @@ export class LightingSystem {
       s.visible = true
       s.position.set(l.x, l.y)
       s.width = l.radius * 2
-      s.height = l.radius * 2
+      s.height = (l.radiusY ?? l.radius) * 2
+      s.rotation = l.angle ?? 0
       s.tint = l.color
       s.alpha = Math.max(0, Math.min(1, l.intensity * flicker * (1 - FOG_PENALTY * this.fogDensity)))
     }

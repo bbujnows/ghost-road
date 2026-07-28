@@ -1,6 +1,7 @@
 import { Container, Graphics } from 'pixi.js'
 import {
   BAND_DIM,
+  BAND_LIT,
   BONE_DOG,
   CRAWLER,
   DEATH_DURATION,
@@ -38,7 +39,8 @@ export interface Snuffable {
   readonly x: number
   readonly y: number
   readonly snuffed: boolean
-  snuff(seconds: number): void
+  /** False if the flame beat him — a Storm Glass lamp cannot be put out. */
+  snuff(seconds: number): boolean
 }
 
 /** What a Bone Dog needs to know about Kara. `Kara` satisfies it. */
@@ -70,6 +72,13 @@ export abstract class Enemy {
 
   /** Fraction of a damage type this shrugs off, 0–1. Missing means none. */
   protected resists: Partial<Record<DamageType, number>> = {}
+
+  /**
+   * Speed multiplier for this frame. Wards write it before the enemy moves and `update`
+   * clears it afterward, so a slow lasts exactly as long as the thing standing on it —
+   * no timers, no stacking bugs, and nothing to clean up when a ward is destroyed.
+   */
+  slowFactor = 1
 
   /** The part that flinches, tints and faces. The shadow stays flat on the ground. */
   protected readonly frame = new Container()
@@ -114,9 +123,19 @@ export abstract class Enemy {
   /**
    * §2.1: nothing standing in the dark can be hurt at all, whatever hits it. Resists
    * apply on top of that gate, never instead of it.
+   *
+   * `threshold` is how much light the attacker needs its target to be standing in.
+   * Everything defaults to Lit; Graveyard Iron's second tier lowers its own bar to Dim,
+   * which is the one sanctioned way to bend this rule. **It never goes below Dim** — a
+   * thing in true darkness is invisible and untouchable, always, by anything.
    */
-  applyDamage(amount: number, type: DamageType, lighting: LightingSystem): number {
-    if (damageMultiplier(lighting.bandAt(this.x, this.y)) === 0) return 0
+  applyDamage(
+    amount: number,
+    type: DamageType,
+    lighting: LightingSystem,
+    threshold = BAND_LIT,
+  ): number {
+    if (lighting.lightAt(this.x, this.y) < Math.max(BAND_DIM, threshold)) return 0
 
     const dealt = amount * (1 - (this.resists[type] ?? 0))
     if (dealt <= 0) return 0
@@ -177,7 +196,7 @@ export abstract class Enemy {
     const to = this.path[segment + 1]
     const segLength = Math.hypot(to.x - from.x, to.y - from.y) || 1
 
-    this.t = Math.min(this.path.length - 1, this.t + (speed * dt) / segLength)
+    this.t = Math.min(this.path.length - 1, this.t + (speed * this.slowFactor * dt) / segLength)
 
     const frac = this.t - segment
     this.x = from.x + (to.x - from.x) * frac
@@ -222,6 +241,9 @@ export abstract class Enemy {
       this.facing * this.stretch.x * (hit ? 1.05 : 1),
       this.stretch.y * (hit ? 0.96 : 1),
     )
+
+    // Consumed. Any ward still holding it will write it again next frame.
+    this.slowFactor = 1
   }
 }
 
@@ -522,7 +544,8 @@ export class TallowMan extends Enemy {
         this.windup += dt
         this.effort = Math.min(1, this.windup / TALLOW_MAN.windup)
         if (this.windup >= TALLOW_MAN.windup) {
-          this.target.snuff(TALLOW_MAN.snuffDuration)
+          // A Storm Glass lamp refuses him. He does not try that one twice.
+          if (!this.target.snuff(TALLOW_MAN.snuffDuration)) this.spoiled.add(this.target)
           this.target = null
           this.windup = 0
         }
@@ -675,8 +698,10 @@ export class BoneDog extends Enemy {
       this.aimY = kara.y
 
       if (d > BONE_DOG.reach) {
-        this.x += ((kara.x - this.x) / d) * BONE_DOG.chaseSpeed * dt
-        this.y += ((kara.y - this.y) / d) * BONE_DOG.chaseSpeed * dt
+        // Slowed here too — Rail Iron laid between her and the road is a real answer.
+        const v = BONE_DOG.chaseSpeed * this.slowFactor * dt
+        this.x += ((kara.x - this.x) / d) * v
+        this.y += ((kara.y - this.y) / d) * v
         this.face(kara.x - this.x)
         return
       }
@@ -700,8 +725,9 @@ export class BoneDog extends Enemy {
       const dx = HOMESTEAD.x - this.x
       const dy = HOMESTEAD.y - this.y
       const dd = Math.hypot(dx, dy) || 1
-      this.x += (dx / dd) * this.speed * dt
-      this.y += (dy / dd) * this.speed * dt
+      const v = this.speed * this.slowFactor * dt
+      this.x += (dx / dd) * v
+      this.y += (dy / dd) * v
       this.face(dx)
       return
     }

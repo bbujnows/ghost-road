@@ -276,6 +276,87 @@ kbd {
   border-color: #ffc078;
 }
 
+/* ── Ward upgrades ───────────────────────────────────────────────────────── */
+
+.upgrades {
+  min-width: 330px;
+  max-width: 360px;
+  gap: 6px;
+}
+
+.upgrade-hint {
+  color: #6c7a78;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.branch {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 9px;
+  border-radius: 7px;
+  border: 1px solid rgba(198, 214, 210, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  color: #b9c4c1;
+  font: inherit;
+  cursor: pointer;
+  transition: background 130ms ease-out, border-color 130ms ease-out;
+}
+
+.branch.affordable {
+  border-color: rgba(255, 192, 120, 0.32);
+}
+
+.branch.affordable:hover {
+  background: rgba(255, 192, 120, 0.12);
+  border-color: rgba(255, 192, 120, 0.6);
+}
+
+/* The road not taken stays on screen, greyed. Removing it would erase the choice. */
+.branch.closed {
+  opacity: 0.4;
+}
+
+.branch:disabled {
+  cursor: default;
+}
+
+.branch-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.branch-name {
+  flex: 1;
+  color: #eae7de;
+}
+
+.branch.closed .branch-name {
+  color: #b9c4c1;
+}
+
+.branch-cost {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: #ffc078;
+}
+
+.branch:disabled .branch-cost {
+  color: #6c7a78;
+}
+
+.branch-note {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: #7d8c8a;
+}
+
 .banner {
   position: absolute;
   top: 108px;

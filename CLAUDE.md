@@ -4,7 +4,7 @@ An Appalachian folk-horror tower defense. Seven nights defending a homestead at 
 abandoned logging road. **Kara — a gold Labrador/pit mix with white paws, belly, and chest — is
 the centerpiece of the design, not a bonus unit.**
 
-## Status: build order steps 1–5 built
+## Status: build order steps 1–6 built
 
 The roadmap in use is **§9 of [docs/redesign-consult.md](docs/redesign-consult.md)**, adopted
 2026-07-27, which supersedes §13 of the design doc.
@@ -12,13 +12,18 @@ The roadmap in use is **§9 of [docs/redesign-consult.md](docs/redesign-consult.
 Playable: the three light bands · the split roster (Lantern Posts give light and deal nothing, Cold
 Iron deals damage and only inside light) · the income floor · fast-forward · Kara's Send, Ear-Perk,
 Show Belly, Bubbles and Blanket, her HP and her Down state · the counterplay roster (Road Walker,
-Crawler, Tallow Man, Bone Dog) · Night 1's three waves, lamp oil, homestead HP, Normal-mode retry.
+Crawler, Tallow Man, Bone Dog) · ward upgrade branches · Night 1's three waves, lamp oil, homestead
+HP, Normal-mode retry.
 
-Next: **step 6** — upgrade branches (2 branches × 2 tiers per ward) and the toy roster, with Hold
-living on the Rope toy.
+Next: **step 7** — Nights 2–7 and their bosses, and the toy loadout alongside them.
 
 Not built: the other wards (salt, bell, spring line, bottle tree, fiddler), the other enemies, fog,
 bond, stash, toys, nights 2–7, Hard mode, endless, audio. Do not add them ahead of the build order.
+
+**The toy loadout is deliberately deferred to step 7**, not skipped. A toy is chosen before a night
+and there is one night, so choosing among eight is choosing what to bring to the only room in the
+building — the same argument that held the Blanket back until the Bone Dog existed. See design doc
+§5.2.
 
 ⚠ **Night 1 is currently a proving ground, not the shipping Night 1.** Every enemy from the
 counterplay pass is folded into it so they can be played at all; the real Night 1 is walkers plus
@@ -107,9 +112,21 @@ drawn *inside* the torso's lower edge or it reads as a detached bar hanging unde
 texture encodes. Gameplay queries it; the GPU lightmap is never read back. They are kept honest by
 generating the gradient's colour stops from `falloffAt()` — change the curve and both move together.
 
-**A light's `radius` is not its pool size.** Use `radiusForThreshold()` for anything player-facing;
-never draw the raw radius. Under flat-core falloff the two are close, which is the point of the
-change — but the preview still draws the delivered radii so the promise stays honest if tuning moves.
+**A light's `radius` is not its pool size.** Use `reachFraction()` / `radiusForThreshold()` for
+anything player-facing; never draw the raw radius. Under flat-core falloff the two are close, which
+is the point of the change — but the preview still draws the delivered radii so the promise stays
+honest if tuning moves.
+
+**Lights can be elliptical.** `Light.radiusY` and `Light.angle` are optional; omitting `radiusY`
+keeps a light on the cheaper circular path in both `lightAt()` and the render. `falloffAt(d/r, 1)`
+is identical to `falloffAt(d, r)`, so the oval reads the same curve at a normalised distance and
+nothing about the lighting model changed to support it.
+
+> **Flat-core falloff makes threshold-moving upgrades much weaker than they sound, and this has
+> caught two designs already.** Raising a lantern's intensity 0.85 → 1.0 moves its lit radius by
+> 1px. Dropping a ward's damage bar from Lit to Dim widens its killable ring by 20% of area, not the
+> doubling you would guess. **Anything that moves a radius is felt; anything that moves a threshold
+> mostly is not.** Measure before writing a number into a design.
 
 ## Enemies
 
@@ -160,7 +177,13 @@ native binary downloaded corrupt. Fix with `npm install lightningcss-win32-x64-m
   constant.
 - **Watch for abilities that let one unit lock a whole enemy out.** Kara staggering the Tallow Man
   had to be made once-per-lantern, or parking her beside a post beat the boss by standing still. Any
-  interrupt on a repeating behaviour needs the same check.
+  interrupt on a repeating behaviour needs the same check. The same class of bug bit again with
+  Storm Glass II: `snuff()` has to return `false` so the Tallow Man knows the flame beat him,
+  otherwise he reaches for a lamp that never goes out and stands there all night.
+- **A ward's upgrade cost comes back from `upgrade()`, never from a separate price lookup.** It
+  returns 0 when the branch is closed or maxed, so the one place the exclusivity rule lives is also
+  the place that decides whether the player pays. Reading the price separately lets the two drift
+  and charges for nothing.
 - **React StrictMode double-mounts effects**, so `Game.destroy()` can fire while `app.init()` is
   still awaiting. Destroying a half-initialized Pixi Application throws `_cancelResize is not a
   function` and takes the whole React tree down with it — the symptom is a blank page, not a

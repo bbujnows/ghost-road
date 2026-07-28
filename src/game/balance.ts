@@ -62,6 +62,191 @@ export const COLD_IRON = {
   minSpacing: 50,
 } as const
 
+// ─── Ward upgrades (consult §4) ─────────────────────────────────────────────
+//
+// Two branches, two tiers each, bought with oil during the night. **Taking a tier
+// commits the ward to that branch** — the other one closes. That exclusivity is the
+// whole point: four nodes you can all buy is not build identity, it is a shopping list.
+//
+// The consult has branches unlocked with stash between nights. Stash is not built, so
+// both branches are open from the start; the exclusivity rule already does the work
+// that matters.
+
+export type BranchId = 'storm' | 'mirror' | 'graveyard' | 'rail'
+
+export interface LanternTier {
+  cost: number
+  radius: number
+  /** Pool stretch along the road axis, and across it. 1/1 is a circle. */
+  along: number
+  across: number
+  /** Multiplier on how long a Tallow Man's snuff lasts. 0 means he cannot. */
+  snuffScale: number
+  note: string
+}
+
+export const LANTERN_BASE: Omit<LanternTier, 'cost' | 'note'> = {
+  radius: LANTERN.radius,
+  along: 1,
+  across: 1,
+  snuffScale: 1,
+}
+
+/**
+ * **Storm Glass** — a taller chimney and a heavier flame. Bigger, and progressively
+ * beyond the Tallow Man's reach.
+ *
+ * Raising *intensity* would have been the obvious lever and it is a trap: under
+ * flat-core falloff, 0.85 → 1.0 moves the lit radius from 107px to 108px. The core is
+ * flat, so brightness buys almost nothing and only radius is felt. This is the kind of
+ * thing that has to be measured before it is written into an upgrade tree.
+ */
+export const STORM_TIERS: LanternTier[] = [
+  {
+    cost: 15,
+    radius: 135,
+    along: 1,
+    across: 1,
+    snuffScale: 0.5,
+    note: 'A storm chimney. Bigger pool, and a snuff lasts half as long.',
+  },
+  {
+    cost: 25,
+    radius: 150,
+    along: 1,
+    across: 1,
+    snuffScale: 0,
+    note: 'Brass cap and doubled glass. The Tallow Man cannot put it out at all.',
+  },
+]
+
+/**
+ * **Mirror Back** — a tin reflector behind the flame, which is how period lanterns
+ * actually threw a directional beam. The same light, poured along the road bed instead
+ * of wasted in the trees either side.
+ */
+export const MIRROR_TIERS: LanternTier[] = [
+  {
+    cost: 15,
+    radius: LANTERN.radius,
+    along: 1.35,
+    across: 0.85,
+    snuffScale: 1,
+    note: 'A tin reflector. The pool stretches along the road and narrows across it.',
+  },
+  {
+    cost: 25,
+    radius: LANTERN.radius,
+    along: 1.7,
+    across: 0.75,
+    snuffScale: 1,
+    note: 'Ground glass and polished tin. A long throw straight down the road bed.',
+  },
+]
+
+export interface IronTier {
+  cost: number
+  length: number
+  tickDamage: number
+  /** Speed multiplier for anything standing on it. 1 is no slow. */
+  slow: number
+  /** The illumination a target needs before the nails bite it. */
+  threshold: number
+  note: string
+}
+
+export const IRON_BASE: Omit<IronTier, 'cost' | 'note'> = {
+  length: COLD_IRON.length,
+  tickDamage: COLD_IRON.tickDamage,
+  slow: 1,
+  threshold: BAND_LIT,
+}
+
+/**
+ * **Graveyard Iron** — nails pulled from a cemetery fence. Hits far harder, and at the
+ * second tier it bites anything merely *visible* rather than only what is properly lit.
+ *
+ * That second tier deliberately bends the game's founding rule, and it is allowed to:
+ * the consult's roster explicitly wants dark-capable exceptions that prove the light
+ * rule. Note it lowers the bar to **Dim, not Dark** — a thing standing in true darkness
+ * is still invisible and still untouchable, always.
+ *
+ * ⚠ **Measured, the Dim exception is worth far less than it sounds.** Under flat-core
+ * falloff a lantern's dim reach is 92.9% of its radius against the lit band's 85%, so
+ * dropping the bar only widens the killable ring around each lamp by **20% of area**.
+ * This is the same trap as raising intensity (see STORM_TIERS): flat-core squashes the
+ * bands together geometrically, so anything that moves a *threshold* buys much less than
+ * anything that moves a *radius*. Assume nothing about band-based upgrades; measure them.
+ *
+ * What the tier is actually worth is the doubled bite — and one combo that fell out of
+ * it. A bubble peaks at L=0.30, squarely Dim by design, and lights a ~40px circle above
+ * the Dim line. **Graveyard Iron II under a bubble is a kill zone with no lantern at
+ * all.** Two charges, five seconds each, anywhere she can reach. That was not designed;
+ * it is what happens when two honest systems meet, and it is worth more than the ring.
+ */
+export const GRAVEYARD_TIERS: IronTier[] = [
+  {
+    cost: 25,
+    length: COLD_IRON.length,
+    tickDamage: 12,
+    slow: 1,
+    threshold: BAND_LIT,
+    note: 'Cemetery nails. Half again the bite.',
+  },
+  {
+    cost: 40,
+    length: COLD_IRON.length,
+    tickDamage: 16,
+    slow: 1,
+    threshold: BAND_DIM,
+    note: 'Twice the bite — and it takes anything you can merely see, not only what is lit.',
+  },
+]
+
+/**
+ * **Rail Iron** — torn up from the logging line this road was cut for. Longer, and at
+ * the second tier rough enough to wade through.
+ *
+ * The slow compounds with its own length, which is why it is 0.75 and not lower: dwell
+ * is `length / (speed × slow)`, so both halves of the upgrade multiply. Measured, a
+ * walker takes 18 ticks crossing a fully-upgraded strip against 7 on a base one.
+ */
+export const RAIL_TIERS: IronTier[] = [
+  {
+    cost: 25,
+    length: 130,
+    tickDamage: COLD_IRON.tickDamage,
+    slow: 1,
+    threshold: BAND_LIT,
+    note: 'Rail salvage. Half again the length of road covered.',
+  },
+  {
+    cost: 40,
+    length: 165,
+    tickDamage: COLD_IRON.tickDamage,
+    slow: 0.75,
+    threshold: BAND_LIT,
+    note: 'Ties and rail both. Long, and rough enough to wade through.',
+  },
+]
+
+export const BRANCHES: Record<
+  BranchId,
+  { ward: WardKind; name: string; role: string; tiers: (LanternTier | IronTier)[] }
+> = {
+  storm: { ward: 'lantern', name: 'Storm Glass', role: 'bigger, and cannot be put out', tiers: STORM_TIERS },
+  mirror: { ward: 'lantern', name: 'Mirror Back', role: 'the same light, aimed', tiers: MIRROR_TIERS },
+  graveyard: { ward: 'iron', name: 'Graveyard Iron', role: 'bites harder, then bites in the dim', tiers: GRAVEYARD_TIERS },
+  rail: { ward: 'iron', name: 'Rail Iron', role: 'longer, then slows', tiers: RAIL_TIERS },
+}
+
+export type WardKind = 'lantern' | 'iron'
+
+export const BRANCHES_FOR: Record<WardKind, [BranchId, BranchId]> = {
+  lantern: ['storm', 'mirror'],
+  iron: ['graveyard', 'rail'],
+}
+
 /**
  * Damage types (consult §4 counterplay matrix). Iron is the only live source today —
  * Cold Iron is the only ward that deals damage at all. `light` is declared because the

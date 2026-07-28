@@ -36,6 +36,7 @@ export default function App() {
   const restart = useCallback(() => gameRef.current?.restart(), [])
   const toggleSpeed = useCallback(() => gameRef.current?.toggleSpeed(), [])
   const selectWard = useCallback((id: 'lantern' | 'iron') => gameRef.current?.selectWard(id), [])
+  const buyUpgrade = useCallback((slot: number) => gameRef.current?.buyUpgrade(slot), [])
 
   return (
     <div className="app">
@@ -49,6 +50,7 @@ export default function App() {
           onRestart={restart}
           onToggleSpeed={toggleSpeed}
           onSelectWard={selectWard}
+          onBuyUpgrade={buyUpgrade}
         />
       </div>
     </div>

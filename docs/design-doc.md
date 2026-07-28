@@ -309,16 +309,59 @@ Wards, not guns. Nothing in this game shoots.
 | **Fiddler** | 55 | Porch-bound. **One aura**: ward damage +20% in 260px (ruling 2026-07-27 — tune-switching cut; nobody opens a menu mid-wave in a five-minute game). Upgrade branches choose bigger radius or Kara move speed. Flees if an enemy comes within 120px. |
 | **Spring Line** | 45 | Running water. 110px barrier enemies path around. Scatters lantern light (§2.5). Heals and traps Kara. |
 
-**Lantern upgrades** (branches, per the consult structure — not yet built): *Storm* (wind-proof,
-matters from Night 4) / *Mirror* (oval pool stretched along the road).
-
 His one tune is *Cold Frost Morning*. The cut tunes survive as his upgrade branches: *Wayfaring
 Stranger* (radius branch) and *Shady Grove* (Kara-speed branch).
 
 **The roster split is built** (2026-07-27): Lantern Post is pure light, Cold Iron is the damage
 layer. Still to come from [redesign-consult.md](redesign-consult.md) §4: the **Bottle Tree**
-(45 oil, traps three enemies — the Hant Cat's counter), iron's 50% spirit resist (step 5,
-counterplay pass), and the upgrade branches (step 6).
+(45 oil, traps three enemies — the Hant Cat's counter) and the remaining wards.
+
+### 5.2 Upgrade branches (built 2026-07-28)
+
+Consult §4: two branches, two tiers, bought with oil during the night. **Taking a tier commits the
+ward to that branch and closes the other for good.** Four nodes you can all buy is a shopping list;
+exclusivity is what makes it build identity. (The consult gates branch *unlocks* behind stash
+between nights. Stash is not built, so both are open — the exclusivity rule already does the work.)
+
+Click any placed ward to select it; `Q` and `E` buy its two branches.
+
+| Ward | Branch | T1 | T2 |
+| --- | --- | --- | --- |
+| **Lantern Post** | **Storm Glass** — bigger, and beyond his reach | 15 · radius 135, a snuff lasts half as long | 25 · radius 150, **cannot be put out at all** |
+| | **Mirror Back** — the same light, aimed | 15 · pool ×1.35 along the road, ×0.85 across | 25 · ×1.7 along, ×0.75 across |
+| **Cold Iron** | **Graveyard Iron** — bites harder | 25 · 12 damage per tick | 40 · 16 per tick, and bites anything in **Dim**, not only Lit |
+| | **Rail Iron** — longer, then slows | 25 · length 90 → 130 | 40 · length 165, and **0.75× speed** on the strip |
+
+Measured, in road actually made fightable: base 204px · Storm II 255px · Mirror II **347px**, at the
+cost of narrowing from 204px to 153px across. Walkers wobble ±9px, so that width is affordable — the
+Mirror is straightforwardly the better coverage buy, and Storm's real sale is the Tallow Man.
+
+Damage per pass against a walker: base 56 · Graveyard II **112** over 90px · Rail II **144** over
+165px. Concentrated versus spread, which is the same overlap-versus-cover decision the whole game
+turns on, now purchasable.
+
+> **Two design traps, both found by measuring rather than reasoning.**
+>
+> 1. **Raising a lantern's intensity is nearly worthless.** Under flat-core falloff (§2.2), 0.85 →
+>    1.0 moves the lit radius from 107px to 108px. The core is flat, so brightness is not felt and
+>    only radius is. Storm Glass sells radius for this reason.
+> 2. **Dropping the damage bar from Lit to Dim is worth ~20% of area, not the doubling it sounds
+>    like** — dim reach is 92.9% of a lantern's radius against lit's 85%, because flat-core squashes
+>    the bands together geometrically.
+>
+> The general lesson: **anything that moves a threshold buys much less than anything that moves a
+> radius.** Assume nothing about band-based upgrades; measure them first.
+
+**Emergent, kept rather than suppressed:** a bubble peaks at `L = 0.30` — squarely Dim, by design,
+so it reveals and never kills. But **Graveyard Iron II bites in Dim**, so a bubble parked on a
+strip is a kill zone with no lantern at all: a ~40px circle, two charges, five seconds each,
+anywhere Kara can reach. Nobody designed that; it is what happens when two honest systems meet, and
+it is worth more than the ring the tier nominally buys.
+
+**The toy loadout (§4) is deliberately not built with this step.** A toy is chosen *before a night*,
+and there is exactly one night — choosing between eight of them is choosing what to bring to the
+only room in the building. Same argument that held the Blanket back through step 4. Toys land with
+Nights 2–7 in step 7, where a per-night choice can mean something.
 
 ### 5.1 Synergies and anti-synergies
 

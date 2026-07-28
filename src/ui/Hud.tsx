@@ -10,7 +10,8 @@ const BAND_LABEL = {
 
 const CONTROLS = [
   { key: '1 / 2', label: 'Select ward' },
-  { key: 'Left click', label: 'Place it' },
+  { key: 'Left click', label: 'Place it, or pick one to upgrade' },
+  { key: 'Q / E', label: 'Buy an upgrade branch' },
   { key: 'Right click', label: 'Send Kara' },
   { key: 'X', label: 'Show Belly' },
   { key: 'B', label: 'Bubble at cursor' },
@@ -90,6 +91,60 @@ function KaraPanel({ state }: { state: GameState }) {
   )
 }
 
+/**
+ * The upgrade tree for whichever placed ward is selected.
+ *
+ * Two branches, and taking a tier in one closes the other for good — so the panel has
+ * to make the commitment legible *before* the click, not explain it afterward. A closed
+ * branch stays on screen, greyed, rather than disappearing: the player needs to see the
+ * road they did not take, or the choice never registers as one.
+ */
+function UpgradePanel({ state, onBuy }: { state: GameState; onBuy: (slot: number) => void }) {
+  const sel = state.selection
+  if (!sel) return null
+
+  const committed = sel.branches.some((b) => b.tier > 0)
+
+  return (
+    <div className="panel upgrades">
+      <span className="label">
+        {sel.kind === 'lantern' ? 'Lantern Post' : 'Cold Iron'}
+        <span className="upgrade-hint"> — Esc to close</span>
+      </span>
+
+      {sel.branches.map((b, i) => (
+        <button
+          key={b.id}
+          type="button"
+          className={`branch ${b.open ? '' : 'closed'} ${b.affordable ? 'affordable' : ''}`}
+          disabled={!b.affordable}
+          onClick={() => onBuy(i)}
+        >
+          <div className="branch-head">
+            <kbd>{i === 0 ? 'Q' : 'E'}</kbd>
+            <span className="branch-name">{b.name}</span>
+            <span className="pips">
+              {Array.from({ length: b.maxTier }, (_, t) => (
+                <span key={t} className={`pip ${t < b.tier ? 'full' : ''}`} />
+              ))}
+            </span>
+            <span className="branch-cost">
+              {b.tier >= b.maxTier ? 'max' : b.open ? b.cost : '—'}
+            </span>
+          </div>
+          <span className="branch-note">{b.note}</span>
+        </button>
+      ))}
+
+      <span className="sub">
+        {committed
+          ? 'Committed. The other branch is closed for this ward.'
+          : 'Taking a tier closes the other branch on this ward.'}
+      </span>
+    </div>
+  )
+}
+
 export interface HudProps {
   state: GameState | null
   onBegin: () => void
@@ -98,6 +153,7 @@ export interface HudProps {
   onRestart: () => void
   onToggleSpeed: () => void
   onSelectWard: (id: 'lantern' | 'iron') => void
+  onBuyUpgrade: (slot: number) => void
 }
 
 /**
@@ -189,6 +245,15 @@ function Rules({ state }: { state: GameState }) {
         <strong>She is also bait.</strong> A Bone Dog chasing her goes wherever she goes — which
         can be straight across your iron.
       </li>
+      <li>
+        <strong>Click a ward you have already built to upgrade it.</strong> Each one has two
+        branches — a lantern can become a <em>Storm Glass</em> (bigger, and eventually impossible
+        to put out) or a <em>Mirror Back</em> (the same light, thrown along the road instead of
+        into the trees). Iron becomes <em>Graveyard Iron</em> (a much harder bite, and at the top
+        it takes anything you can merely <span className="ring-dim">see</span>) or{' '}
+        <em>Rail Iron</em> (longer, and rough enough to wade through).{' '}
+        <strong>Taking either tier closes the other branch on that ward for good.</strong>
+      </li>
     </ol>
   )
 }
@@ -201,6 +266,7 @@ export function Hud({
   onRestart,
   onToggleSpeed,
   onSelectWard,
+  onBuyUpgrade,
 }: HudProps) {
   if (!state) return null
 
@@ -260,6 +326,11 @@ export function Hud({
       </div>
 
       <div className="hud-bottom">
+        {/* The upgrade panel takes the shop's place rather than sitting beside it — the
+            bottom bar is already three panels wide, and a selected ward is a mode. */}
+        {state.selection ? (
+          <UpgradePanel state={state} onBuy={onBuyUpgrade} />
+        ) : (
         <div className="panel wards">
           <div
             className={`ward ${state.selectedWard === 'lantern' ? 'selected' : ''}`}
@@ -290,6 +361,7 @@ export function Hud({
             under cursor {state.lightUnderCursor.toFixed(2)} — {BAND_LABEL[state.bandUnderCursor]}
           </span>
         </div>
+        )}
 
         <KaraPanel state={state} />
 
