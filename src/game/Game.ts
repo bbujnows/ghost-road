@@ -7,6 +7,7 @@ import {
   EAR_PERK_LEAD,
   FAST_FORWARD,
   HOMESTEAD_MAX_HP,
+  KARA,
   LANTERN,
   NIGHT_1_STARTING_OIL,
   NIGHT_1_WAVES,
@@ -14,12 +15,15 @@ import {
   OIL_PER_WAVE,
   SHOW_BELLY,
   WAVE_BREAK,
+  waveSize,
 } from './balance'
+import type { EnemyKind } from './balance'
 import { Bloom, Motes, Sparks, vignette } from './atmosphere'
 import { Bubble } from './bubbles'
-import { Corpse, RoadWalker } from './enemies'
+import { Corpse, spawn } from './enemies'
+import type { Enemy, EnemyContext } from './enemies'
 import { Kara } from './kara'
-import type { Threat } from './kara'
+import type { KaraMode, Threat } from './kara'
 import { LightingSystem, bandOf, radiusForThreshold } from './lighting'
 import type { Band, Light } from './lighting'
 import { ColdIron, Lantern } from './wards'
@@ -53,6 +57,14 @@ export interface GameState {
   bellyCooldown: number
   bubbleCharges: number
   bubbleMax: number
+  karaHp: number
+  karaMaxHp: number
+  karaState: KaraMode
+  /** Seconds left in whatever is holding her; 0 when she is free. */
+  karaStateRemaining: number
+  /** Lanterns the Tallow Man has put out, and the longest one has left. */
+  lanternsOut: number
+  relightIn: number
   /** What the break is counting down to — count of walkers in the coming wave. */
   nextWaveCount: number
   lightUnderCursor: number
@@ -67,15 +79,18 @@ export interface GameState {
 }
 
 /**
- * design-doc §13 steps 1–2: the lightmap and its bands, then a lantern and a Road
- * Walker. This is the minimum loop that proves light-gated damage is fun rather than
- * merely clever.
+ * Consult §9 build order, through step 5.
  *
- * Deliberately absent, because the build order says so: Kara's abilities (she walks
- * and nothing else), every ward except the lantern, every enemy except the walker,
- * fog, bond, stash, toys, nights 2–7, hard mode, and endless.
+ * Built: the lightmap and its bands · the split roster (lanterns light, iron kills) ·
+ * the income floor · fast-forward · Kara's actives · the counterplay pass, which is
+ * where the enemies started teaching different lessons instead of scaling.
  *
- * Render layering: scene → lighting.overlay (multiply) → foreground.
+ * Deliberately absent, because the build order says so: upgrade branches and the toy
+ * roster (step 6), nights 2–7 and their bosses (step 7), the Nightly and Long Roads
+ * (step 8), and — deferred outright — audio, fog, bond, stash, and hard mode.
+ *
+ * Render layering: scene → lighting.overlay (multiply) → bloom.output → foreground →
+ * vignette.
  */
 export class Game {
   private app = new Application()
@@ -87,7 +102,7 @@ export class Game {
   private smoke!: Smoke
   private bloom!: Bloom
   private motes!: Motes
-  private walkers: RoadWalker[] = []
+  private enemies: Enemy[] = []
   private corpses: Corpse[] = []
   private lanterns: Lantern[] = []
   private irons: ColdIron[] = []
@@ -99,7 +114,7 @@ export class Game {
   // Starts on the briefing so the player has time to read before anything walks.
   private phase: Phase = 'briefing'
   private waveIndex = 0
-  private spawnQueue: number[] = []
+  private spawnQueue: { at: number; kind: EnemyKind }[] = []
   private elapsed = 0
   private breakTimer = 4
   private homesteadHp = HOMESTEAD_MAX_HP
@@ -245,6 +260,8 @@ export class Game {
         this.showBelly()
       } else if (key === 'b') {
         this.blowBubble()
+      } else if (key === 'z') {
+        this.blanket()
       } else if (key === 'f') {
         this.toggleSpeed()
       } else if (key === '?' || key === '/' || key === 'h') {
@@ -318,6 +335,16 @@ export class Game {
     const bubble = new Bubble(x, y, this.lighting)
     this.bubbles.push(bubble)
     this.bloom.source.addChild(bubble.gfx)
+  }
+
+  /**
+   * §3.2 The Blanket. `Z` puts her under and `Z` takes her out, which is the whole
+   * interface: one key, two states, and a three-second floor she will not come out
+   * before. Untargetable underneath, and blind — the Bone Dog is why it exists.
+   */
+  blanket() {
+    if (this.inputLocked) return
+    this.kara.blanket()
   }
 
   /**
@@ -459,21 +486,25 @@ export class Game {
   }
 
   private queueWave(index: number) {
-    const wave = NIGHT_1_WAVES[index]
     this.spawnQueue = []
-    for (let i = 0; i < wave.count; i++) {
-      this.spawnQueue.push(this.elapsed + i * wave.gap)
+    for (const group of NIGHT_1_WAVES[index].groups) {
+      for (let i = 0; i < group.count; i++) {
+        this.spawnQueue.push({ at: this.elapsed + group.start + i * group.gap, kind: group.kind })
+      }
     }
+    // Groups overlap on purpose — a crawler burst lands while the walkers still have
+    // your attention — so the queue has to come out in time order, not group order.
+    this.spawnQueue.sort((a, b) => a.at - b.at)
     this.phase = 'wave'
   }
 
   /** §7.1 Normal: replay the night from wave 1. Oil and wards reset with it. */
   private retryNight() {
-    for (const w of this.walkers) {
-      this.scene.removeChild(w.gfx)
-      w.gfx.destroy({ children: true })
+    for (const e of this.enemies) {
+      this.scene.removeChild(e.gfx)
+      e.gfx.destroy({ children: true })
     }
-    this.walkers = []
+    this.enemies = []
 
     for (const c of this.corpses) {
       this.scene.removeChild(c.gfx)
@@ -502,6 +533,8 @@ export class Game {
       b.gfx.destroy({ children: true })
     }
     this.bubbles = []
+
+    this.kara.reset(HOMESTEAD.x - 175, HOMESTEAD.y + 48)
 
     this.homesteadHp = HOMESTEAD_MAX_HP
     this.oil = NIGHT_1_STARTING_OIL
@@ -540,49 +573,57 @@ export class Game {
       if (this.breakTimer <= 0) this.queueWave(this.waveIndex)
     }
 
-    while (this.spawnQueue.length && this.spawnQueue[0] <= this.elapsed) {
-      this.spawnQueue.shift()
-      const walker = new RoadWalker()
-      this.walkers.push(walker)
-      this.scene.addChild(walker.gfx)
+    while (this.spawnQueue.length && this.spawnQueue[0].at <= this.elapsed) {
+      const next = this.spawnQueue.shift()!
+      const enemy = spawn(next.kind)
+      this.enemies.push(enemy)
+      this.scene.addChild(enemy.gfx)
     }
 
     for (const lantern of this.lanterns) lantern.animate(dt)
 
     // The iron does the killing now — but only where the lanterns have made it possible.
     for (const iron of this.irons) {
-      for (const hit of iron.update(dt, this.walkers, this.lighting)) {
+      for (const hit of iron.update(dt, this.enemies, this.lighting)) {
         this.sparks.burst(hit.x, hit.y)
       }
     }
 
-    for (const walker of this.walkers) {
-      walker.update(dt, this.lighting)
-      if (walker.arrived) {
-        this.homesteadHp -= walker.porchDamage
-        walker.hp = 0
+    // The Tallow Man wants the lanterns and the Bone Dog wants Kara, so an enemy has to
+    // be able to see more of the board than the road it is standing on.
+    const context: EnemyContext = {
+      lighting: this.lighting,
+      kara: this.kara,
+      lanterns: this.lanterns,
+    }
+
+    for (const enemy of this.enemies) {
+      enemy.update(dt, context)
+      if (enemy.arrived) {
+        this.homesteadHp -= enemy.porchDamage
+        enemy.hp = 0
       }
     }
 
-    // Cleanup. Oil is only awarded for kills, not for walkers that reached the porch.
-    // A killed walker hands its container to a Corpse and falls; one that reached the
+    // Cleanup. Oil is only awarded for kills, not for things that reached the porch.
+    // A killed enemy hands its container to a Corpse and falls; one that reached the
     // porch is simply gone, because it walked inside.
-    const survivors: RoadWalker[] = []
-    for (const walker of this.walkers) {
-      if (!walker.dead) {
-        survivors.push(walker)
+    const survivors: Enemy[] = []
+    for (const enemy of this.enemies) {
+      if (!enemy.dead) {
+        survivors.push(enemy)
         continue
       }
-      if (walker.arrived) {
-        this.scene.removeChild(walker.gfx)
-        walker.gfx.destroy({ children: true })
+      if (enemy.arrived) {
+        this.scene.removeChild(enemy.gfx)
+        enemy.gfx.destroy({ children: true })
       } else {
         this.oil += OIL_PER_LIT_KILL
-        this.sparks.wisp(walker.x, walker.y)
-        this.corpses.push(new Corpse(walker.gfx))
+        this.sparks.wisp(enemy.x, enemy.y)
+        this.corpses.push(new Corpse(enemy.gfx))
       }
     }
-    this.walkers = survivors
+    this.enemies = survivors
 
     for (const corpse of this.corpses) corpse.update(dt)
     for (const corpse of this.corpses.filter((c) => c.finished)) {
@@ -594,9 +635,12 @@ export class Game {
     if (this.homesteadHp <= 0) {
       this.homesteadHp = 0
       this.phase = 'failed'
-    } else if (this.phase === 'wave' && !this.spawnQueue.length && !this.walkers.length) {
+    } else if (this.phase === 'wave' && !this.spawnQueue.length && !this.enemies.length) {
       // §9 income floor: clearing a wave pays regardless of how it was cleared.
       this.oil += OIL_PER_WAVE
+      // She gets a breather too. Without this there is no way to heal her at all and a
+      // bad wave 1 turns the rest of the night into a slow bleed.
+      this.kara.rest(KARA.healPerWave)
       this.waveIndex++
       if (this.waveIndex >= NIGHT_1_WAVES.length) {
         this.phase = 'complete'
@@ -609,7 +653,7 @@ export class Game {
     // What Kara can hear. `soonVisible` asks where each walker will be in
     // EAR_PERK_LEAD seconds and whether the light will have reached it by then — that
     // lookahead is the whole reason her ears mean anything.
-    const threats: Threat[] = this.walkers.map((w) => {
+    const threats: Threat[] = this.enemies.map((w) => {
       const ahead = w.futurePosition(EAR_PERK_LEAD)
       return {
         x: w.x,
@@ -662,7 +706,7 @@ export class Game {
       oil: Math.floor(this.oil),
       selectedWard: this.selectedWard,
       canAffordSelected: this.oil >= this.wardCost(this.selectedWard),
-      walkersAlive: this.walkers.length,
+      walkersAlive: this.enemies.length,
       breakRemaining: Math.max(0, this.breakTimer),
       paused: this.paused,
       helpOpen: this.helpOpen,
@@ -671,9 +715,15 @@ export class Game {
       bellyCooldown: this.kara.bellyCooldownRemaining,
       bubbleCharges: this.kara.bubbleCharges,
       bubbleMax: BUBBLES.maxCharges,
+      karaHp: Math.ceil(this.kara.hp),
+      karaMaxHp: KARA.hp,
+      karaState: this.kara.state,
+      karaStateRemaining: this.kara.stateRemaining,
+      lanternsOut: this.lanterns.filter((l) => l.snuffed).length,
+      relightIn: this.lanterns.reduce((m, l) => Math.max(m, l.relightIn), 0),
       nextWaveCount:
         this.phase === 'break' && this.waveIndex < NIGHT_1_WAVES.length
-          ? NIGHT_1_WAVES[this.waveIndex].count
+          ? waveSize(this.waveIndex)
           : 0,
       lightUnderCursor: L,
       bandUnderCursor: bandOf(L),

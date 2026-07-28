@@ -82,6 +82,27 @@
   background: linear-gradient(90deg, #ffc078, #ff8f6b);
 }
 
+/* Her white, so her bar reads as her and not as another homestead. */
+.meter-fill.kara {
+  background: linear-gradient(90deg, #f6f1e6, #c9954a);
+}
+
+.kara-panel .meter {
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.kara-note {
+  color: #ff8f6b;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+/* She is not lost. But the panel should not look fine about it either. */
+.kara-down {
+  border-color: rgba(255, 143, 107, 0.35);
+}
+
 /* The probe is a build tool: it makes the invisible band system legible while tuning. */
 .probe {
   font-size: 11px;

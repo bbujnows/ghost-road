@@ -1,6 +1,7 @@
 import { Container, Graphics } from 'pixi.js'
-import { BUBBLES, EAR_PERK_RADIUS, KARA_WALK_SPEED, SHOW_BELLY } from './balance'
+import { BLANKET, BUBBLES, EAR_PERK_RADIUS, KARA, KARA_WALK_SPEED, SHOW_BELLY } from './balance'
 import type { LightingSystem } from './lighting'
+import { HOMESTEAD } from './world'
 
 /**
  * What Kara can hear. The caller works out visibility, because that depends on the
@@ -43,8 +44,13 @@ export interface Threat {
  * `createRig()` is called twice — once drawing the coat, once drawing only the white —
  * and `poseRig()` applies identical transforms to both every frame.
  *
- * Her abilities (the bark, Ear-Perk, Show Belly, the hose, bubbles, the ball stash,
- * toys, the blanket, bond) are specified in the design doc and are NOT built yet.
+ * ── What she can do ─────────────────────────────────────────────────────────
+ *
+ * Built: Ear-Perk (passive), Send, Bubbles, Show Belly, the Blanket, and going Down.
+ * Every one of them traces to something the real dog does.
+ *
+ * Not built, and specified in the design doc: the bark (§10), the hose (§3.3), Hold and
+ * the toy loadout (§4), the dropped ball (§3.5), bond (§3.4), and Lead.
  */
 
 /** Lab/pit mix: warm gold coat. */
@@ -70,6 +76,46 @@ const ROLL_IN = 0.25
 const ROLL_PIVOT_Y = -24
 
 const ease = (t: number) => t * t * (3 - 2 * t)
+
+/**
+ * What she is doing, and therefore what the player is allowed to ask of her.
+ *
+ * `down` is the only one she does not choose. §3.1: she is never permanently lost —
+ * at 0 HP she limps home and is unavailable, and the player is blind for that stretch.
+ * That is the entire cost, and it is enough.
+ */
+export type KaraMode = 'free' | 'belly' | 'blanket' | 'coax' | 'down'
+
+/**
+ * The quilt off the porch rail. Drawn under the darkness overlay on purpose: a dog
+ * under a blanket in an unlit yard is a dog nobody can find, which is exactly the
+ * bargain the ability offers.
+ */
+function quiltShape(): Graphics {
+  const g = new Graphics()
+  const CLOTH = 0x6d4f52
+  const PATCH = 0x8a5f56
+  const PALE = 0x9c8a76
+
+  g.ellipse(0, -1, 26, 5).fill({ color: 0x000000, alpha: 0.3 })
+  // A lumpy mound with a dog-shaped ridge under it.
+  g.moveTo(-25, -1)
+    .quadraticCurveTo(-22, -15, -10, -18)
+    .quadraticCurveTo(2, -21, 12, -17)
+    .quadraticCurveTo(24, -13, 25, -1)
+    .quadraticCurveTo(0, 3, -25, -1)
+    .fill(CLOTH)
+  // Patchwork, following the curve rather than sitting flat on it.
+  g.moveTo(-14, -14).lineTo(-3, -18).lineTo(-1, -8).lineTo(-12, -4).fill({ color: PATCH, alpha: 0.7 })
+  g.moveTo(4, -18).lineTo(15, -14).lineTo(14, -5).lineTo(3, -8).fill({ color: PALE, alpha: 0.35 })
+  // Stitching, and the ragged trailing edge.
+  g.moveTo(-25, -1).quadraticCurveTo(0, 2, 25, -1).stroke({ width: 1.2, color: PALE, alpha: 0.4 })
+  for (let i = 0; i < 7; i++) {
+    const x = -22 + i * 7
+    g.moveTo(x, 0).lineTo(x + 2, 3).lineTo(x + 4, 0).fill({ color: CLOTH, alpha: 0.85 })
+  }
+  return g
+}
 
 // Skeleton, in rig-local px. Ground is y = 0.
 const HIP = { x: -14, y: -20 }
@@ -353,9 +399,35 @@ export class Kara {
    */
   bellyGlow = 0
 
-  /** True while she is down and cannot be commanded. */
+  /** §3.1. She is never permanently lost; at 0 this becomes 25 seconds of absence. */
+  hp: number = KARA.hp
+
+  private mode: KaraMode = 'free'
+
+  get state(): KaraMode {
+    return this.mode
+  }
+
+  /** True while she cannot be given an order. */
   get busy() {
-    return this.bellyTimer > 0
+    return this.mode !== 'free'
+  }
+
+  /**
+   * Whether anything on the board can reach her. False under the blanket, false while
+   * she is being coaxed out of it, and false once she is Down — a downed dog is out of
+   * the fight, not a thing left on the field to be chewed on.
+   */
+  get targetable() {
+    return this.mode === 'free' || this.mode === 'belly'
+  }
+
+  /** Seconds left in whatever is currently holding her, for the HUD. */
+  get stateRemaining() {
+    if (this.mode === 'down') return Math.max(0, this.downTimer)
+    if (this.mode === 'coax') return Math.max(0, this.coaxTimer)
+    if (this.mode === 'blanket') return Math.max(0, BLANKET.minimum - this.underTimer)
+    return 0
   }
 
   get bellyReady() {
@@ -385,17 +457,124 @@ export class Kara {
   private roll = 0
   private charges: number = BUBBLES.maxCharges
 
+  private downTimer = 0
+  private underTimer = 0
+  private coaxTimer = 0
+  /** 0 in the open, 1 completely hidden. Drives the quilt and hides the rigs. */
+  private under = 0
+
+  private quilt = quiltShape()
+  /** One white paw left sticking out. In the dark it is the only way to find her. */
+  private pawOut = new Graphics()
+
   constructor(x: number, y: number) {
     this.x = x
     this.y = y
-    this.body.addChild(this.coatRig.root)
-    this.markings.addChild(this.markRig.root)
+
+    this.quilt.alpha = 0
+    this.pawOut
+      .roundRect(-3, -5, 6, 5, 2)
+      .fill(WHITE)
+      .ellipse(0, 0, 3.6, 2.2)
+      .fill(WHITE)
+    this.pawOut.position.set(17, 0)
+    this.pawOut.alpha = 0
+
+    this.body.addChild(this.coatRig.root, this.quilt)
+    this.markings.addChild(this.markRig.root, this.pawOut)
   }
 
+  /**
+   * A Send while she is under the blanket does not fail — it starts the coaxing, and
+   * she goes where she was told once she is out. Making the player press the right key
+   * to undo a thing they chose would be a tax on their own decision.
+   */
   moveTo(x: number, y: number) {
+    if (this.mode === 'blanket') {
+      if (!this.leaveBlanket()) return
+      this.target = { x, y }
+      this.speed = KARA_WALK_SPEED
+      return
+    }
     if (this.busy) return
     this.target = { x, y }
     this.speed = KARA_WALK_SPEED
+  }
+
+  /**
+   * §3.2 The Blanket. She loves being under blankets, and she goes willingly — pressing
+   * `Z` again (or sending her) starts the coaxing, which she will not begin before the
+   * three-second minimum. Six seconds from cover to having her back.
+   *
+   * Under it she is untargetable, blind, and contributes nothing. It is a panic button
+   * and a total blackout at the same time, which is the honest price of invulnerability
+   * in a game where her presence is the whole information system.
+   */
+  blanket(): boolean {
+    if (this.mode === 'blanket') return this.leaveBlanket()
+    if (this.mode !== 'free') return false
+
+    this.mode = 'blanket'
+    this.underTimer = 0
+    this.target = null
+    return true
+  }
+
+  private leaveBlanket(): boolean {
+    if (this.mode !== 'blanket' || this.underTimer < BLANKET.minimum) return false
+    this.mode = 'coax'
+    this.coaxTimer = BLANKET.coax
+    return true
+  }
+
+  /**
+   * Something got to her. 2× while she is on her back, which is the first time Show
+   * Belly's vulnerability has ever cost anything.
+   */
+  bite(amount: number) {
+    if (!this.targetable) return
+
+    this.hp -= amount * (this.roll > 0 ? SHOW_BELLY.vulnerability : 1)
+    if (this.hp > 0) return
+
+    // §3.1 Down. She limps to the porch and lies there. She is not lost.
+    this.hp = 0
+    this.mode = 'down'
+    this.downTimer = KARA.downDuration
+    this.roll = 0
+    this.bellyGlow = 0
+    // Two dogs can put her Down inside the 2.2s roll. If the envelope were left running
+    // it would finish and hand her back to 'free' with the Down clock still going —
+    // Show Belly would silently cancel the punishment it exists to expose her to.
+    this.bellyTimer = 0
+    this.target = { x: HOMESTEAD.x - 60, y: HOMESTEAD.y + 40 }
+    this.speed = KARA.limpSpeed
+  }
+
+  /** Between waves she gets a breather. Not from the doc — see KARA.healPerWave. */
+  rest(amount: number) {
+    if (this.mode === 'down') return
+    this.hp = Math.min(KARA.hp, this.hp + amount)
+  }
+
+  /** Retrying the night. She starts it whole, whatever happened in the last one. */
+  reset(x: number, y: number) {
+    this.x = x
+    this.y = y
+    this.hp = KARA.hp
+    this.mode = 'free'
+    this.target = null
+    this.speed = KARA_WALK_SPEED
+    this.bellyTimer = 0
+    this.bellyCooldown = 0
+    this.roll = 0
+    this.bellyGlow = 0
+    this.charges = BUBBLES.maxCharges
+    this.under = 0
+    this.downTimer = 0
+    this.underTimer = 0
+    this.coaxTimer = 0
+    this.alert = false
   }
 
   /**
@@ -414,6 +593,7 @@ export class Kara {
   /** Returns false if she is on cooldown or already down. */
   showBelly(): boolean {
     if (!this.bellyReady) return false
+    this.mode = 'belly'
     this.bellyTimer = SHOW_BELLY.flash + SHOW_BELLY.recovery
     this.bellyCooldown = SHOW_BELLY.cooldown
     this.target = null
@@ -425,6 +605,35 @@ export class Kara {
 
     this.bellyCooldown = Math.max(0, this.bellyCooldown - dt)
     this.charges = Math.min(BUBBLES.maxCharges, this.charges + dt / BUBBLES.regen)
+
+    // ── The blanket ──────────────────────────────────────────────────────────
+    // She goes under fast and comes out slowly, and no part of her works while she is
+    // under: no ears, no light, no position. That blackout is the price.
+    if (this.mode === 'blanket' || this.mode === 'coax') {
+      this.alert = false
+      this.bellyGlow = 0
+      this.roll = 0
+
+      if (this.mode === 'blanket') {
+        this.underTimer += dt
+        this.under = Math.min(1, this.underTimer / BLANKET.settle)
+      } else {
+        this.coaxTimer -= dt
+        // She stays covered until the last half-second, then shrugs it off.
+        this.under = Math.min(1, Math.max(0, this.coaxTimer / 0.5))
+        if (this.coaxTimer <= 0) {
+          this.mode = 'free'
+          this.under = 0
+        }
+      }
+
+      // She squirms under there, because of course she does.
+      this.breath += dt * 2.2
+      this.pose(false, lighting)
+      return
+    }
+
+    this.under = 0
 
     // ── Show Belly envelope ──────────────────────────────────────────────────
     if (this.bellyTimer > 0) {
@@ -443,12 +652,28 @@ export class Kara {
       else this.bellyGlow = 0
 
       this.walk += dt * 9
+      if (this.bellyTimer <= 0) this.mode = 'free'
       this.pose(false, lighting)
       return
     }
 
     this.roll = 0
     this.bellyGlow = 0
+
+    // ── Down (§3.1) ──────────────────────────────────────────────────────────
+    // She keeps limping toward the porch while the clock runs, so the player watches
+    // her go rather than seeing her switch off. Nothing else about her works.
+    if (this.mode === 'down') {
+      this.downTimer -= dt
+      if (this.downTimer <= 0) {
+        this.mode = 'free'
+        this.hp = KARA.hp
+        this.speed = KARA_WALK_SPEED
+      }
+      this.alert = false
+      this.earLift = Math.max(0, this.earLift - dt * 2)
+      this.tailWag += (0 - this.tailWag) * Math.min(1, dt * 4)
+    }
 
     if (this.target) {
       const dx = this.target.x - this.x
@@ -469,6 +694,13 @@ export class Kara {
     }
 
     this.breath += dt * 1.6
+
+    // A downed dog is not listening for you. This is the blindness the player is paying
+    // for, and it has to be total or the Bone Dog costs nothing.
+    if (this.mode === 'down') {
+      this.pose(moving, lighting)
+      return
+    }
 
     // ── Ear-Perk (§3.2) ──────────────────────────────────────────────────────
     //
@@ -533,10 +765,29 @@ export class Kara {
     this.body.position.set(this.x, this.y)
     this.markings.position.set(this.x, this.y)
 
+    // ── Under the blanket ────────────────────────────────────────────────────
+    // She goes, and the quilt comes. One white paw is left out — in an unlit yard it is
+    // the only thing on screen that says where she is, which is §2.4 doing its job in
+    // the one situation where the rest of her has stopped.
+    this.coatRig.root.alpha = 1 - this.under
+    this.markRig.root.alpha = 1 - this.under
+    this.quilt.alpha = this.under
+    this.pawOut.alpha = this.under
+    if (this.under > 0) {
+      // Not still under there. She never is.
+      const squirm = Math.sin(this.breath * 1.6) * 0.9 * this.under
+      this.quilt.scale.set(this.under, this.under * (1 + Math.sin(this.breath * 2.4) * 0.03))
+      this.quilt.position.x = squirm
+      this.pawOut.position.set(17 * this.facing + squirm, -1 + Math.sin(this.breath * 3) * 0.6)
+    }
+
     // Her white picks up whatever light is nearest and never fully vanishes: in the
     // dark she is four pale paws and a chest moving through the black. On her back it
     // is fully lit by her own reflection, which is the point of the ability.
     const lit = lighting.lightAt(this.x, this.y)
-    this.markings.alpha = Math.max(0.28 + 0.72 * lit, this.roll)
+    const glow = Math.max(0.28 + 0.72 * lit, this.roll)
+    // Down, her white goes dull. She is still findable — just plainly not in this.
+    this.markings.alpha = this.mode === 'down' ? glow * 0.5 : glow
+    this.body.alpha = this.mode === 'down' ? 0.75 : 1
   }
 }

@@ -166,6 +166,20 @@ She is never permanently lost. At 0 HP she goes **Down**: limps to the porch and
 **25s** (12s at Bond T4+). The player is blind for that stretch. That is the entire cost, and it is
 enough — do not add a permadeath mode.
 
+**Built 2026-07-28**, alongside the Bone Dog. Two implementation notes that are design, not detail:
+
+- She keeps **limping toward the porch on screen** while the clock runs. The player watches her go
+  rather than seeing her switch off, and a hurt dog walking away is a considerably worse thing to
+  look at than a grey icon.
+- Nothing may bite a downed dog. She is out of the fight, not a body left on the field. The cost is
+  her absence and it should never read as cruelty.
+
+**She heals 25 HP per wave cleared** — *not from the original design*, added in the counterplay pass
+and flagged for playtest (§12.2). The spring line is the only healing the doc specifies and it is
+not built, so without this a bad wave 1 turns the rest of the night into an unrecoverable bleed —
+the same death-spiral shape the consultation cut out of the oil economy. Partial rather than full so
+damage still carries between waves.
+
 ### 3.2 Command set
 
 | Command | Input | Cooldown | Cost / catch |
@@ -173,7 +187,7 @@ enough — do not add a permadeath mode.
 | **Send** | Right click | — | Free. She walks; she does not teleport. |
 | **Bubbles** | `B` + click | **2 charges, +1 per 8s** (consult ruling) | Her blink. She chases at 180px/s. Costs a charge, not a cooldown, so both can be spent at once when it matters. |
 | **Show Belly** | `X` | 14s (11s at T3+) | 1.4s flash + 0.8s getting up. Takes **2× damage** and accepts no commands for the full 2.2s. |
-| **Blanket** | `Z` | — | Minimum 3.0s under. Calling her out then takes `3.0 − 0.4 × bondTier` seconds (floor 1.0s) of coaxing. **Not built** — see below. |
+| **Blanket** | `Z` | — | Minimum 3.0s under, then `3.0 − 0.4 × bondTier` seconds (floor 1.0s) of coaxing. Untargetable underneath, and blind. |
 | **Hold** | `H` | 20s | Requires the Rope toy equipped that night (§4). Plants her; enemies within 90px are slowed 35% and cannot pass. Max 8s. She takes damage the whole time. |
 | **Throw ball** | `T` when she drops one | — | +3 bond, but she is out of position ~4s fetching. |
 | **Lead** | `L` | Once per night | Unlocked at Bond T5, usable Night 7 only. Fog → 0 within 300px of her for 12s. |
@@ -181,11 +195,18 @@ enough — do not add a permadeath mode.
 **The Bark is not a command.** It fires automatically, at most once per night, when something
 physically reaches the homestead. See §10.
 
-**The Blanket is deliberately unbuilt** (2026-07-27). It is a panic button whose entire value is
-becoming untargetable — and **nothing in the game targets Kara yet.** Building it now would ship a
-button that costs 6 seconds of her presence and buys nothing, which is exactly the kind of ability
-that gets judged as bad when it is only premature. It lands with the **Bone Dog** in the
-counterplay pass, which is the threat it answers.
+**The Blanket shipped with the Bone Dog** (2026-07-28), which is what it was waiting for. It was
+held back through step 4 on the grounds that a panic button whose entire value is becoming
+untargetable buys nothing while nothing targets her; once something did, it became the answer to it
+in the same pass.
+
+As built: `Z` puts her under, `Z` (or a Send) takes her out, and she will not begin coming out
+before the 3.0s minimum. Underneath she is untargetable — and **blind**. No ears, no light, no
+position, no orders carried out. That blackout is the honest price of invulnerability in a game
+whose entire information system is the dog, and it is what stops the Blanket being a free answer to
+every bad moment. One white paw is left sticking out from under the quilt: in an unlit yard it is
+the only thing on screen that says where she is, which is §2.4 doing its work in the one situation
+where the rest of her has stopped.
 
 **Ear-Perk is not a command either.** It is a readout. She lifts her ears and orients toward the
 nearest threat within radius, 2.0s before it becomes visible. From **Night 5**, one perk in six is
@@ -334,11 +355,46 @@ any instant with Space; auto-pauses on tab blur; state saves to `localStorage` a
 
 ### Enemy stats
 
-Only the Road Walker is specified so far; the rest get numbers as they are built.
+| Enemy | HP | Speed | Porch damage | Resists | Built |
+| --- | --- | --- | --- | --- | --- |
+| **Road Walker** | 45 | 30 px/s | 8 | — | ✅ |
+| **Crawler** | 22 | 62 px/s | 5 | — | ✅ |
+| **Tallow Man** | 90 | 22 px/s | 12 | light 50% *(inert)* | ✅ |
+| **Bone Dog** | 24 | 55 / 78 px/s | 6 | — | ✅ |
+| The Unseen · Drownd Girl · Hant Cat · Hollow Kin · The Fetch | — | — | — | — | ❌ |
 
-| Enemy | HP | Speed | Porch damage |
+### The counterplay pass (2026-07-28)
+
+Consult §9 step 5. Every enemy here punishes one specific habit and is answered one specific way,
+and no two share an answer.
+
+| Enemy | Punishes | Answered by | Measured |
 | --- | --- | --- | --- |
-| **Road Walker** | 45 | 30 px/s | 8 |
+| **Crawler** | A gap in your coverage, crossed before you can patch it. 1070px in 17s against the walker's 36s. | One lit iron strip, always. | 1.45s dwell → 3–4 ticks = 24–32 vs 22 HP. |
+| **Tallow Man** | Lanterns set tight against the road bed. He pinches them out for 8s. | **Spatially** — a post further than 58px from his walk is out of reach — or **Kara**, who squares up and runs him off it. | 4.09s dwell → 80 damage vs 90 HP: one strip deliberately does not finish him. A Kara stagger roots him 2.0s on the iron for 40 more, which does. |
+| **Bone Dog** | Leaving her parked in the open. It ignores the house entirely. | The Blanket, a recall, or **using her as bait** — it follows her wherever she goes, including across your iron. | 7.5s of one dog to Down her, 3.8s of two, half that while she is on her back. |
+
+**Damage types.** `iron` and `light` (consult §4). Iron is the only live source — Cold Iron is the
+only ward that deals damage at all after the roster split. The Tallow Man's 50% light resist is
+carried as **declared and inert**: it becomes live the moment a light-burn ward ships in step 6, and
+substituting some other counterplay now only to unpick it then would cost far more than three lines
+of data. His two live counters are spatial and canine, and neither of them needs the type.
+
+**The Tallow Man forgets a lamp Kara chased him off.** Without that, he re-reaches for the same
+lantern the instant the 2.0s stagger ends, and a dog parked beside one post locks the boss out of
+the night permanently — she would beat him by standing still, which is the opposite of what she is
+for. She saves *that* lamp; he goes and finds another. Following him down the line and spoiling each
+one is real, expensive micro and exactly the kind wanted.
+
+> ### ⚠ Night 1 is currently a proving ground
+>
+> The night structure below gives Night 1 Road Walkers plus the Tallow Man as its boss, with the
+> Crawler arriving on Night 2 and Bone Dogs on Night 3. Nights 2–7 are build-order step 7 and do not
+> exist, so **every enemy written in the counterplay pass is folded into Night 1** to be playable at
+> all. Wave 1 is still walkers only and still teaches the baseline; waves 2 and 3 are a test
+> harness. Restore the shipping composition when step 7 lands.
+>
+> Measured pacing: 55.7s / 58.2s / 82.6s uncontested, **3:40 for the night** including breaks.
 
 > **45 HP is tuned against the split roster** (consult §1-S5 target): Cold Iron deals ~56 per
 > pass (7 ticks × 8 over a 3.0s dwell on the 90px strip), so one lantern + one iron kills with
@@ -619,7 +675,13 @@ its **positioning**: the hook is the dog, the light is the terrain, the horror i
 3. **Endless boss modifiers need a blocklist.** Some stacks are likely unwinnable rather than
    hard — a salt-leaping, lantern-snuffing boss in 0.95 fog has no counterplay left. Enumerate
    after the first playable endless run.
-4. **Night 5's boss.** The Greenbrier Ghost is real West Virginia folklore (Zona Heaster Shue,
+4. **Is 25s Down too long for a five-minute night?** It is the doc's own number, but on a ~60s wave
+   it removes her for nearly half of it, and two Bone Dogs put her there in 3.8s. Watch whether
+   going Down reads as a mistake the player made or as the night being taken away from them.
+5. **Is `KARA.healPerWave = 25` right, or should she heal fully between waves?** Invented in the
+   counterplay pass because nothing else can heal her yet (§3.1). Full healing removes the
+   consequence; none at all reintroduces a death spiral. 25 is a guess that needs a session.
+6. **Night 5's boss.** The Greenbrier Ghost is real West Virginia folklore (Zona Heaster Shue,
    1897) and is settler history rather than sacred tradition, which is why it is used here.
    Several obvious alternatives for this slot — the Raven Mocker and the Wampus Cat among them —
    are Cherokee, drawn from living religious tradition rather than ghost stories. If the game

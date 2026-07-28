@@ -1,5 +1,5 @@
 import type { GameState } from '../game/Game'
-import { OIL_PER_LIT_KILL, OIL_PER_WAVE, ROAD_WALKER } from '../game/balance'
+import { OIL_PER_LIT_KILL, OIL_PER_WAVE } from '../game/balance'
 import './hud.css'
 
 const BAND_LABEL = {
@@ -14,19 +14,48 @@ const CONTROLS = [
   { key: 'Right click', label: 'Send Kara' },
   { key: 'X', label: 'Show Belly' },
   { key: 'B', label: 'Bubble at cursor' },
+  { key: 'Z', label: 'Under the blanket' },
   { key: 'F', label: 'Fast-forward' },
   { key: 'Space', label: 'Pause' },
   { key: '?', label: 'Help' },
 ]
 
+/** What she is doing, when it is something the player did not just ask for. */
+const KARA_STATE: Partial<Record<GameState['karaState'], string>> = {
+  belly: 'on her back',
+  blanket: 'under the blanket',
+  coax: 'coming out',
+  down: 'down',
+}
+
 /**
  * Kara's cooldowns, unlike her Ear-Perk, must be on screen — a resource the player
  * cannot count is a resource they will not spend.
+ *
+ * Her health is here for a narrower reason: the Bone Dog is the first thing that can
+ * hurt her, and a player who cannot see the damage landing will read her going Down as
+ * the game taking her away rather than as something they were shown coming.
  */
 function KaraPanel({ state }: { state: GameState }) {
+  const hpPct = (state.karaHp / state.karaMaxHp) * 100
+  const note = KARA_STATE[state.karaState]
+
   return (
-    <div className="panel kara-panel">
-      <span className="label">Kara</span>
+    <div className={`panel kara-panel ${state.karaState === 'down' ? 'kara-down' : ''}`}>
+      <span className="label">
+        Kara
+        {note && (
+          <span className="kara-note">
+            {' '}
+            — {note}
+            {state.karaStateRemaining > 0 && ` ${Math.ceil(state.karaStateRemaining)}s`}
+          </span>
+        )}
+      </span>
+
+      <div className="meter">
+        <div className="meter-fill kara" style={{ width: `${hpPct}%` }} />
+      </div>
 
       <div className={`ability ${state.bellyReady ? 'ready' : 'cooling'}`}>
         <kbd>X</kbd>
@@ -43,6 +72,18 @@ function KaraPanel({ state }: { state: GameState }) {
           {Array.from({ length: state.bubbleMax }, (_, i) => (
             <span key={i} className={`pip ${i < state.bubbleCharges ? 'full' : ''}`} />
           ))}
+        </span>
+      </div>
+
+      <div className={`ability ${state.karaState === 'free' ? 'ready' : 'cooling'}`}>
+        <kbd>Z</kbd>
+        <span className="ability-name">Blanket</span>
+        <span className="ability-state">
+          {state.karaState === 'blanket'
+            ? state.karaStateRemaining > 0
+              ? `${Math.ceil(state.karaStateRemaining)}s`
+              : 'call her'
+            : 'hide'}
         </span>
       </div>
     </div>
@@ -129,6 +170,25 @@ function Rules({ state }: { state: GameState }) {
         her walking speed, and the bubble drifts and glows — enough light to reveal what's out
         there, never enough to kill it.
       </li>
+      <li>
+        <strong>Not everything on the road wants the house.</strong> <em>Crawlers</em> are quick
+        and flimsy — one lit iron strip finishes them, but they cross a gap in your coverage
+        before you can patch it. The <em>Tallow Man</em> walks past your lanterns and pinches
+        them out; a post set back from the road bed is out of his reach, and Kara standing over
+        one will run him off it. <em>Bone Dogs</em> ignore the homestead entirely and come for
+        her.
+      </li>
+      <li>
+        <strong>Kara can be hurt, and never lost.</strong> At zero she limps to the porch and is
+        gone for twenty-five seconds — and you are blind for all of it. <strong>Press Z</strong>{' '}
+        and she ducks under the porch quilt, where nothing can touch her. She will not come out
+        for three seconds, and coaxing her out takes three more. Six seconds of not having her.
+        Watch for the one white paw sticking out.
+      </li>
+      <li>
+        <strong>She is also bait.</strong> A Bone Dog chasing her goes wherever she goes — which
+        can be straight across your iron.
+      </li>
     </ol>
   )
 }
@@ -177,7 +237,11 @@ export function Hud({
         <div className="panel">
           <span className="label">On the road</span>
           <span className="value">{state.walkersAlive}</span>
-          <span className="sub">{ROAD_WALKER.hp} hp each</span>
+          <span className={`sub ${state.lanternsOut > 0 ? 'blocked' : ''}`}>
+            {state.lanternsOut > 0
+              ? `${state.lanternsOut} lantern${state.lanternsOut > 1 ? 's' : ''} out · ${Math.ceil(state.relightIn)}s`
+              : 'all lanterns lit'}
+          </span>
         </div>
 
         <div className="top-buttons">

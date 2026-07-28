@@ -1,7 +1,7 @@
 import { Container, Graphics } from 'pixi.js'
 import { COLD_IRON, LANTERN } from './balance'
 import type { Light, LightingSystem } from './lighting'
-import type { RoadWalker } from './enemies'
+import type { Enemy } from './enemies'
 
 /**
  * Wards, not guns — and after the roster split (consult §4), not even the lantern
@@ -25,6 +25,12 @@ export class Lantern {
   private housing = new Container()
   private flame = new Graphics()
   private sway = Math.random() * Math.PI * 2
+
+  /** Seconds left in the dark. The Tallow Man puts this on the clock. */
+  private out = 0
+  /** Eased 1 → 0 as the flame dies, so nothing snaps off. */
+  private burn = 1
+  private smoke = new Graphics()
 
   constructor(x: number, y: number, lighting: LightingSystem) {
     this.x = x
@@ -65,15 +71,58 @@ export class Lantern {
     this.flame.ellipse(0, -6, 3, 5).fill({ color: 0xfff0cc, alpha: 0.95 })
     this.flame.ellipse(0, -6, 6, 9).fill({ color: 0xffc078, alpha: 0.35 })
     this.emissive.position.set(x + 10, y - 36)
-    this.emissive.addChild(this.flame)
+    this.emissive.addChild(this.flame, this.smoke)
+  }
+
+  /** True while it is putting out no light at all. */
+  get snuffed() {
+    return this.out > 0
+  }
+
+  /** Seconds until it relights, for anything that wants to show the player. */
+  get relightIn() {
+    return Math.max(0, this.out)
+  }
+
+  /**
+   * Put out. The lantern is not destroyed and the oil is not refunded — the player owns
+   * a dark post for `seconds`, which is worse than owning nothing, because they built
+   * their iron around where the light used to be.
+   */
+  snuff(seconds: number) {
+    this.out = Math.max(this.out, seconds)
   }
 
   /** Called every frame, including while a wave is between spawns. */
   animate(dt: number) {
     this.sway += dt * 2.4
     this.housing.rotation = Math.sin(this.sway) * 0.045
-    this.flame.scale.set(1 + Math.sin(this.sway * 3.1) * 0.09, 1 + Math.sin(this.sway * 2.3) * 0.13)
+
+    // Dies fast, comes back slowly — a pinched wick goes out at once, and relighting is
+    // the lantern catching again rather than a switch being thrown.
+    this.out = Math.max(0, this.out - dt)
+    const want = this.out > 0 ? 0 : 1
+    this.burn += (want - this.burn) * Math.min(1, dt * (want === 0 ? 14 : 2.6))
+
+    this.light.intensity = LANTERN.intensity * this.burn
+
+    const flicker = 1 + Math.sin(this.sway * 3.1) * 0.09
+    this.flame.scale.set(this.burn * flicker, this.burn * (1 + Math.sin(this.sway * 2.3) * 0.13))
     this.flame.position.x = Math.sin(this.sway) * 1.2
+    this.flame.alpha = this.burn
+
+    // A thread of smoke off the dead wick, so a dark post still reads as a lantern that
+    // was put out rather than one you forgot to build.
+    this.smoke.clear()
+    if (this.burn < 0.6) {
+      const fade = 1 - this.burn / 0.6
+      for (let i = 0; i < 3; i++) {
+        const t = (this.sway * 0.6 + i * 0.33) % 1
+        this.smoke
+          .circle(Math.sin(t * 6 + i) * 3, -8 - t * 22, 1.6 + t * 2.6)
+          .fill({ color: 0x9aa7ad, alpha: 0.22 * fade * (1 - t) })
+      }
+    }
   }
 }
 
@@ -134,7 +183,7 @@ export class ColdIron {
   }
 
   /** Returns the positions of everything it bit this tick, for the ember burst. */
-  update(dt: number, walkers: RoadWalker[], lighting: LightingSystem): { x: number; y: number }[] {
+  update(dt: number, enemies: Enemy[], lighting: LightingSystem): { x: number; y: number }[] {
     this.cooldown -= dt
     this.glints.clear()
 
@@ -142,9 +191,10 @@ export class ColdIron {
     this.cooldown = COLD_IRON.tickInterval
 
     const hits: { x: number; y: number }[] = []
-    for (const w of walkers) {
+    for (const w of enemies) {
       if (!this.covers(w.x, w.y)) continue
-      if (w.applyDamage(COLD_IRON.tickDamage, lighting) > 0) {
+      // Iron, specifically — the counterplay matrix is built on the type, not the ward.
+      if (w.applyDamage(COLD_IRON.tickDamage, 'iron', lighting) > 0) {
         hits.push({ x: w.x, y: w.y })
         // The nails glint where they bite.
         const lx = (Math.random() - 0.5) * COLD_IRON.length * 0.8
