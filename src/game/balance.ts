@@ -467,14 +467,51 @@ export const DROVER = {
 } as const
 
 /**
- * Wind (Night 5+). A gust puts out every lantern that is not Storm Glass, for as long as
- * a Tallow Man's snuff would — and Storm Glass resists it on exactly the same scale.
+ * Wind (Night 5+). **A squall line that crosses the hollow, not a switch that turns the
+ * lanterns off** (rewritten 2026-07-29, fix-plan F1).
  *
- * This is what the Storm branch was for. Until it existed the branch was insurance
- * against a single enemy and looked strictly worse than Mirror Back; from Night 5 it is
- * the difference between a lit road and a dark one every twenty seconds.
+ * ⚠ The first version snuffed *every* non-Storm lantern *simultaneously* for 5s. The
+ * recorded session shows what that actually was: `6 lanterns out · 4s`, the whole map
+ * dark but the cabin, seven enemies on the road, none visible, none damageable, nothing
+ * to press. That is not difficulty — difficulty is a problem with an answer. It was a
+ * periodic removal of the information layer, the damage layer and the decision space at
+ * once, on a timer the player could not influence.
+ *
+ * As rebuilt, a gust is a horizontal **band** that sweeps across the map. It snuffs
+ * lanterns as the front reaches them and only inside the band, so:
+ *
+ *  - **The map is never fully dark.** There is always somewhere lit and somewhere to act.
+ *  - **Placement is the answer.** Lanterns spread across the vertical lose a few at a
+ *    time; lanterns clustered in one band all go out together. A free, positional counter
+ *    — the lesson PvZ's fog teaches with Plantern and Blover.
+ *  - **Storm Glass becomes a choice, not a tax.** Armour the two lanterns in your worst
+ *    band instead of needing to armour all six.
+ *  - **The warning is actionable.** 1.8s and a visible band is enough to move Kara toward
+ *    the stretch about to go dark — a decision *inside* a gust, which is what was missing.
+ *
+ * `maxShare` is the guarantee that stops it degenerating: a single gust may never take
+ * more than half the lanterns, whatever the draw. A rule that keeps a mechanic honest is
+ * worth more than the severity it costs.
  */
-export const GUST = { duration: 5, warning: 1.6 } as const
+export const GUST = {
+  /** Per lantern. Shorter than the old global 5s because outages now stagger. */
+  duration: 3.5,
+  warning: 1.8,
+  /** px/s the front travels. Crosses the board in about 1.4s.  */
+  sweepSpeed: 1000,
+  /** Half the band's height. 120 covers a third of the play area. */
+  halfHeight: 120,
+  /**
+   * Hard cap on the fraction of lanterns one gust may take.
+   *
+   * **This was 0.5 and it broke the mechanic it was protecting.** Measured over 2000
+   * bands: at 0.5, six lanterns spread down the road lost exactly 3 and six lanterns
+   * clustered in one band also lost exactly 3 — the cap saved the clumper, so the
+   * positional counter the whole rewrite exists to create did not exist. At 0.67 a
+   * clustered build loses 4 and a spread build loses 2–3, which is the decision.
+   */
+  maxShare: 0.67,
+} as const
 
 // ─── Session ────────────────────────────────────────────────────────────────
 

@@ -136,10 +136,19 @@ export const NIGHTS: NightSpec[] = [
     n: 6,
     name: 'Sixth Night',
     lede: 'The oil is nearly gone. What you have built is what you have.',
-    teaches: 'Starting oil cut by nearly half. Every wave you clear still pays — but the opening is yours to solve.',
-    startingOil: 60,
-    fog: 0.6,
-    wind: 26,
+    teaches: 'Starting oil cut hard. Every wave you clear still pays — but the opening is yours to solve.',
+    // ⚠ **Destacked 2026-07-29 (fix-plan F2).** This night shipped with 60 oil, fog 0.60 and gusts
+    // every 26s — three heavy modifiers at once, against the *explicit* fairness rule written for
+    // the Nightly Road generator: stacked-modifier difficulty is super-linear while oil compensation
+    // is linear. Measured: at fog 0.60 a lantern's lit pool falls 102px → 67px, and 60 oil buys two
+    // lanterns and one strip, covering ~134px of a 1070px road with zero wards carried in. The
+    // recorded session died here at 5 oil with one lantern up.
+    //
+    // Night 6's identity is *scarcity*, so scarcity stays and the weather gives way. 75 is still the
+    // sharpest drop in the campaign — a 35% cut from Night 5.
+    startingOil: 75,
+    fog: 0.35,
+    wind: 0,
     waves: [
       { groups: [g('walker', 8, 3.6), g('unseen', 4, 2.6, 12), g('crawler', 4, 1.2, 20)] },
       {

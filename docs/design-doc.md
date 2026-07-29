@@ -511,7 +511,7 @@ every wave, per §6.
 | 3 | Third Night | The Unseen | 0.15 | 95 | — | **Bell Witch** | 40 | 3:46 |
 | 4 | Fourth Night | Bone Dogs | 0.25 | 105 | — | — | 43 | 3:44 |
 | 5 | Fifth Night | Wind | 0.50 | 115 | 22s | **Greenbrier Ghost** | 48 | 3:35 |
-| 6 | Sixth Night | Oil scarcity | 0.60 | 60 | 26s | — | 58 | 4:15 |
+| 6 | Sixth Night | Oil scarcity | 0.35 | 75 | — | — | 58 | 4:15 |
 | 7 | Seventh Night | All of it | 0.80 | 130 | 18s | **The Drover** | 75 | 4:27 |
 
 Measured uncontested; every night is inside the five-minute budget, and the count of bodies runs
@@ -523,10 +523,19 @@ night ends.
 most need Kara's ears is the one night they lie to you.** Night 4 then puts the Bone Dog on the
 board and asks you to trust them again.
 
-**Night 5 is where Storm Glass stops being insurance.** Wind puts out every lantern that is not
-Storm Glass, on the same `snuff()` path and the same resistance scale as the Tallow Man. Until wind
-existed the branch was a hedge against one enemy and looked strictly worse than Mirror Back; from
-Night 5 it is the difference between a lit road and a dark one every twenty seconds.
+**Night 5 is where Storm Glass stops being insurance.** Wind takes the lanterns a squall line
+crosses, on the same `snuff()` path and the same resistance scale as the Tallow Man. Until wind
+existed the branch was a hedge against one enemy and looked strictly worse than Mirror Back.
+
+> **Night 6 was destacked 2026-07-29** (fix-plan F2). It shipped with 60 oil, fog 0.60 *and* gusts —
+> three heavy modifiers against the explicit fairness rule written for the Nightly Road generator,
+> which the campaign's own hand-authored content then broke. Measured: at fog 0.60 a lantern's lit
+> pool falls 102px → 67px, and 60 oil buys two lanterns and one strip against 58 bodies with **zero
+> wards carried in**. Now 75 oil, fog 0.35, no wind — still the sharpest oil cut in the campaign, and
+> a night whose difficulty comes from the thing it is about.
+>
+> **The rule generalises: at most two heavy modifiers on any authored night.** Night 7 keeps all
+> three deliberately, because Night 7 is the wall and it starts you at 130.
 
 **Three bosses are not built, and are blocked rather than cut:**
 

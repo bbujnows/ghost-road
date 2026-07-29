@@ -200,6 +200,18 @@ native binary downloaded corrupt. Fix with `npm install lightningcss-win32-x64-m
 - **`as const` infers literal types.** `private charges = BUBBLES.maxCharges` is typed `2`, not
   `number`, and any assignment fails. Annotate `: number` on fields initialised from a balance
   constant.
+- **At most two heavy modifiers on any one night** (fog, wind, an oil cut, a boss). Stacked-modifier
+  difficulty is super-linear while oil compensation is linear. This rule was written for the Nightly
+  Road generator and then broken by hand-authored Night 6, which is the expensive kind of mistake:
+  the reasoning was already done. See design doc §6.
+- **A guard against degeneracy can quietly kill the mechanic it protects.** The gust's "never take
+  more than half your lanterns" cap made spread and clustered builds lose exactly the same number,
+  which erased the positional counter the whole system exists to create. Whenever you add a cap,
+  measure whether the thing it is protecting still varies.
+- **Actors are y-sorted.** `Game.actors` has `sortableChildren` and everything in it sets
+  `zIndex = y` per frame — including the cabin, which is why `buildScene` hands it back rather than
+  adding it to the background. Anything new that stands on the ground goes in this layer or it will
+  draw through the homestead.
 - **Watch for abilities that let one unit lock a whole enemy out.** Kara staggering the Tallow Man
   had to be made once-per-lantern, or parking her beside a post beat the boss by standing still. Any
   interrupt on a repeating behaviour needs the same check. The same class of bug bit again with

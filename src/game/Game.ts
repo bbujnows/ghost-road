@@ -188,6 +188,15 @@ export class Game {
   private app = new Application()
   private lighting!: LightingSystem
   private scene = new Container()
+  /**
+   * Everything that stands on the ground: the cabin, Kara, wards, enemies, corpses.
+   *
+   * Sorted by `zIndex = y` every frame, so anything further down the screen draws in
+   * front. Before this the cabin lived in the scene background and every enemy walking
+   * up to it drew on top — the recorded session has hooded figures standing at roof
+   * height. Painter's algorithm is the only version of this that is right in every case.
+   */
+  private actors = new Container()
   private foreground = new Container()
 
   private kara!: Kara
@@ -196,6 +205,7 @@ export class Game {
   private worldScene = new Container()
   private worldEmissive = new Container()
   private worldLights: Light[] = []
+  private homestead = new Container()
   private bloom!: Bloom
   private motes!: Motes
   private weather!: Weather
@@ -236,6 +246,8 @@ export class Game {
   private toy: ToyId = 'rope'
   /** Seconds to the next gust. 0 on a still night. */
   private gustTimer = 0
+  /** The squall line currently crossing, if any. Null between gusts. */
+  private gustBand: { y: number; front: number; spared: Set<Lantern> } | null = null
   /** §3.2 false ear-perks. The Bell Witch plants these; they have no bodies. */
   private phantoms: { x: number; y: number; until: number }[] = []
   private paused = false
@@ -277,11 +289,16 @@ export class Game {
 
     this.lighting = new LightingSystem(WORLD_WIDTH, WORLD_HEIGHT)
 
+    this.actors.sortableChildren = true
+
     const built = buildScene(WORLD_WIDTH, WORLD_HEIGHT)
     this.worldScene = built.scene
     this.worldEmissive = built.emissive
     this.worldLights = built.lights
-    this.scene.addChild(built.scene)
+    this.homestead = built.homestead
+    this.homestead.zIndex = HOMESTEAD.y
+    this.scene.addChild(built.scene, this.actors)
+    this.actors.addChild(this.homestead)
     this.smoke = built.smoke
 
     // The homestead's own windows and porch lantern. The only light the player starts
@@ -306,7 +323,7 @@ export class Game {
     })
 
     this.kara = new Kara(HOMESTEAD.x - 175, HOMESTEAD.y + 48)
-    this.scene.addChild(this.kara.body)
+    this.actors.addChild(this.kara.body)
     // Her white is emissive too — it is the one thing the dark must never take.
     this.bloom.source.addChild(this.kara.markings)
 
@@ -733,13 +750,16 @@ export class Game {
       const dimR = LANTERN.radius * reachFraction(LANTERN.intensity, BAND_DIM)
       const color = blocked ? 0xff8f6b : 0xffc078
 
+      // fix-plan F6: the **lit** ring is the promise the player cares about — it is where
+      // the ward can kill — so it carries the weight. The dim ring drops to a hint. The
+      // old emphasis was inverted, and every purchase looked smaller than its own preview.
       this.preview
         .circle(x, y, dimR)
-        .stroke({ width: 1, color, alpha: blocked ? 0.25 : 0.28 })
+        .stroke({ width: 1, color, alpha: blocked ? 0.12 : 0.18 })
         .circle(x, y, litR)
-        .stroke({ width: 1.5, color, alpha: blocked ? 0.35 : 0.6 })
+        .fill({ color, alpha: blocked ? 0.04 : 0.09 })
         .circle(x, y, litR)
-        .fill({ color, alpha: blocked ? 0.03 : 0.06 })
+        .stroke({ width: 1.5, color, alpha: blocked ? 0.4 : 0.75 })
     } else {
       const color = blocked ? 0xff8f6b : 0x9fb8cf
       const angle = this.roadAngleAt(x, y)
@@ -807,7 +827,7 @@ export class Game {
   /** Put an enemy on the board. Bosses also hand their self-light to the lightmap. */
   private add(enemy: Enemy) {
     this.enemies.push(enemy)
-    this.scene.addChild(enemy.gfx)
+    this.actors.addChild(enemy.gfx)
     if (enemy instanceof Boss) this.lighting.add(enemy.glow)
   }
 
@@ -819,20 +839,53 @@ export class Game {
   }
 
   /**
-   * §6 Night 5+. A gust puts out every lantern that is not Storm Glass — and Storm Glass
-   * resists it on exactly the scale it resists the Tallow Man, because it is the same
-   * `snuff()` call. This is what the branch was for: until wind existed it was insurance
-   * against one enemy and looked strictly worse than Mirror Back.
+   * §6 Night 5+, rebuilt per fix-plan F1. A gust is a **band that sweeps the map**, not a
+   * switch: it takes the lanterns it passes over, in the order it reaches them, and never
+   * more than half of them.
+   *
+   * The band is chosen when the warning starts, so the 1.8s of warning is a real look at
+   * which stretch of road is about to go dark — long enough to move Kara toward it.
    */
   private blowWind(dt: number) {
-    if (!this.night.wind) return
+    if (!this.night.wind) {
+      this.gustBand = null
+      return
+    }
 
     this.gustTimer -= dt
-    if (this.gustTimer > 0) return
 
+    // Pick the band and show it, a beat before the front arrives.
+    if (this.gustTimer <= GUST.warning && !this.gustBand) {
+      const y = 140 + Math.random() * (WORLD_HEIGHT - 320)
+      // The cap is applied at selection: if this band would take more than half, the
+      // lanterns furthest from its centre are spared and never enter the front's path.
+      const inBand = this.lanterns
+        .filter((l) => Math.abs(l.y - y) <= GUST.halfHeight)
+        .sort((a, b) => Math.abs(a.y - y) - Math.abs(b.y - y))
+      const allowed = Math.max(1, Math.floor(this.lanterns.length * GUST.maxShare))
+      this.gustBand = { y, front: -120, spared: new Set(inBand.slice(allowed)) }
+      this.weather.warn(y, GUST.halfHeight)
+    }
+
+    if (this.gustBand) {
+      const wasFront = this.gustBand.front
+      this.gustBand.front += GUST.sweepSpeed * dt
+
+      for (const lantern of this.lanterns) {
+        if (this.gustBand.spared.has(lantern)) continue
+        if (Math.abs(lantern.y - this.gustBand.y) > GUST.halfHeight) continue
+        // Snuffed exactly as the front passes it, so outages stagger across the map.
+        if (lantern.x > wasFront && lantern.x <= this.gustBand.front) {
+          lantern.snuff(GUST.duration)
+        }
+      }
+
+      if (this.gustBand.front > WORLD_WIDTH + 120) this.gustBand = null
+    }
+
+    if (this.gustTimer > 0) return
     this.gustTimer = this.night.wind
     this.weather.blow()
-    for (const lantern of this.lanterns) lantern.snuff(GUST.duration)
   }
 
   private placeWard(x: number, y: number) {
@@ -846,12 +899,12 @@ export class Game {
       // upgrading would be a puzzle about the UI, not about the road.
       const lantern = new Lantern(x, y, this.roadAngleAt(x, y), this.lighting)
       this.lanterns.push(lantern)
-      this.scene.addChild(lantern.gfx)
+      this.actors.addChild(lantern.gfx)
       this.bloom.source.addChild(lantern.emissive)
     } else {
       const iron = new ColdIron(x, y, this.roadAngleAt(x, y))
       this.irons.push(iron)
-      this.scene.addChild(iron.gfx)
+      this.actors.addChild(iron.gfx)
     }
   }
 
@@ -908,6 +961,8 @@ export class Game {
     for (const light of this.worldLights) this.lighting.remove(light)
     this.scene.removeChild(this.worldScene)
     this.worldScene.destroy({ children: true })
+    this.actors.removeChild(this.homestead)
+    this.homestead.destroy({ children: true })
     this.bloom.source.removeChild(this.worldEmissive)
     this.worldEmissive.destroy({ children: true })
 
@@ -915,10 +970,13 @@ export class Game {
     this.worldScene = built.scene
     this.worldEmissive = built.emissive
     this.worldLights = built.lights
+    this.homestead = built.homestead
+    this.homestead.zIndex = HOMESTEAD.y
     this.smoke = built.smoke
 
     // Back to the bottom of the scene, under everything that was placed on it.
     this.scene.addChildAt(built.scene, 0)
+    this.actors.addChild(this.homestead)
     this.bloom.source.addChildAt(built.emissive, 0)
     for (const light of built.lights) this.lighting.add(light)
   }
@@ -949,21 +1007,21 @@ export class Game {
 
     for (const e of this.enemies) {
       if (e instanceof Boss) this.lighting.remove(e.glow)
-      this.scene.removeChild(e.gfx)
+      this.actors.removeChild(e.gfx)
       e.gfx.destroy({ children: true })
     }
     this.enemies = []
     this.phantoms = []
 
     for (const c of this.corpses) {
-      this.scene.removeChild(c.gfx)
+      this.actors.removeChild(c.gfx)
       c.gfx.destroy({ children: true })
     }
     this.corpses = []
 
     for (const l of this.lanterns) {
       this.lighting.remove(l.light)
-      this.scene.removeChild(l.gfx)
+      this.actors.removeChild(l.gfx)
       this.bloom.source.removeChild(l.emissive)
       l.gfx.destroy({ children: true })
       l.emissive.destroy({ children: true })
@@ -971,7 +1029,7 @@ export class Game {
     this.lanterns = []
 
     for (const s of this.irons) {
-      this.scene.removeChild(s.gfx)
+      this.actors.removeChild(s.gfx)
       s.gfx.destroy({ children: true })
     }
     this.irons = []
@@ -1168,7 +1226,7 @@ export class Game {
       // A boss stops lighting the road the moment it goes down, either way it went.
       if (enemy instanceof Boss) this.lighting.remove(enemy.glow)
       if (enemy.arrived) {
-        this.scene.removeChild(enemy.gfx)
+        this.actors.removeChild(enemy.gfx)
         enemy.gfx.destroy({ children: true })
       } else {
         this.oil += OIL_PER_LIT_KILL
@@ -1180,7 +1238,7 @@ export class Game {
 
     for (const corpse of this.corpses) corpse.update(dt)
     for (const corpse of this.corpses.filter((c) => c.finished)) {
-      this.scene.removeChild(corpse.gfx)
+      this.actors.removeChild(corpse.gfx)
       corpse.gfx.destroy({ children: true })
     }
     this.corpses = this.corpses.filter((c) => !c.finished)
@@ -1257,8 +1315,22 @@ export class Game {
     this.publish()
   }
 
+  /**
+   * Painter's algorithm over everything standing on the ground. `zIndex = y`, so anything
+   * further down the screen draws in front — an enemy on the final approach goes behind
+   * the cabin, and Kara in the yard stays in front of it.
+   */
+  private sortActors() {
+    this.kara.body.zIndex = this.kara.y
+    for (const enemy of this.enemies) enemy.gfx.zIndex = enemy.y
+    for (const corpse of this.corpses) corpse.gfx.zIndex = corpse.gfx.y
+    for (const lantern of this.lanterns) lantern.gfx.zIndex = lantern.y
+    for (const iron of this.irons) iron.gfx.zIndex = iron.y
+  }
+
   /** Lightmap, bloom, motes, sparks, placement preview — the passes that run every frame. */
   private renderPasses(dt: number) {
+    this.sortActors()
     this.lighting.update(this.app.renderer, dt)
     this.weather.update(dt, this.night.fog)
     this.motes.update(dt, (x, y) => this.lighting.lightAt(x, y))

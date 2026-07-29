@@ -127,10 +127,13 @@ export class Weather {
   private gust = 0
   private gustX = 0
   private density = 0
+  /** The stretch of road the coming gust will cross, shown during the warning. */
+  private band: { y: number; halfHeight: number; t: number } | null = null
+  private bandGfx = new Graphics()
 
   constructor(width: number, height: number, count = 14) {
     this.width = width
-    this.container.addChild(this.gfx, this.gustGfx)
+    this.container.addChild(this.gfx, this.bandGfx, this.gustGfx)
 
     for (let i = 0; i < count; i++) {
       this.banks.push({
@@ -150,6 +153,17 @@ export class Weather {
     this.gustX = -160
   }
 
+  /**
+   * Called when the gust's band is chosen, a beat before the front arrives.
+   *
+   * The band has to be *visible*, not just announced. A warning the player cannot act on
+   * is a countdown; a warning that shows which stretch of road is about to go dark is a
+   * decision — move the dog there, or accept it and cover elsewhere.
+   */
+  warn(y: number, halfHeight: number) {
+    this.band = { y, halfHeight, t: 0 }
+  }
+
   update(dt: number, density: number) {
     this.density += (density - this.density) * Math.min(1, dt * 2)
 
@@ -161,6 +175,28 @@ export class Weather {
         this.gfx
           .ellipse(b.x, b.y, b.w / 2, b.h / 2)
           .fill({ color: 0x8ea3ad, alpha: 0.05 * b.a * this.density })
+      }
+    }
+
+    // The band: a pale seam across the stretch about to be crossed. It fades in over the
+    // warning and is gone once the front has passed through it.
+    this.bandGfx.clear()
+    if (this.band) {
+      this.band.t += dt
+      const b = this.band
+      const fade = Math.min(1, b.t * 2.2) * Math.max(0, 1 - Math.max(0, b.t - 2.2) / 1.2)
+      if (fade <= 0) {
+        this.band = null
+      } else {
+        this.bandGfx
+          .rect(0, b.y - b.halfHeight, this.width, b.halfHeight * 2)
+          .fill({ color: 0x9fb8cf, alpha: 0.035 * fade })
+        for (const edge of [b.y - b.halfHeight, b.y + b.halfHeight]) {
+          this.bandGfx
+            .moveTo(0, edge)
+            .lineTo(this.width, edge)
+            .stroke({ width: 1, color: 0xd8e6ea, alpha: 0.16 * fade })
+        }
       }
     }
 

@@ -56,6 +56,15 @@ export const HOMESTEAD: Vec2 = { x: 640, y: 640 }
 
 export interface BuiltScene {
   scene: Container
+  /**
+   * The cabin, deliberately NOT added to `scene`.
+   *
+   * It has to live in the caller's y-sorted actor layer instead: enemies walk *to* the
+   * homestead, and with the cabin in the background every one of them drew on top of it —
+   * the recorded session has hooded figures standing at roof height. Painter's algorithm
+   * over the actors is the only version of this that is right in every case.
+   */
+  homestead: Container
   /** Drawn above the lightmap — glows that must never be swallowed by the dark. */
   emissive: Container
   /** Lights the scene itself contributes, registered by the caller. */
@@ -358,21 +367,75 @@ export function buildScene(width: number, height: number): BuiltScene {
   }
   scene.addChild(scrub)
 
-  // The old logging road: bed, then two wheel ruts.
+  /**
+   * The old logging road (fix-plan F4).
+   *
+   * **It used to be the brightest large shape in the frame after the cabin** — a pale tan
+   * ribbon legible end to end at every fog density. In a game whose premise is that the
+   * dark hides things, the terrain was competing with the lanterns instead of waiting for
+   * them. It now sits *below* the ground plane in value, so an unlit stretch is a darker
+   * absence and a lantern **discovers** the road rather than decorating it.
+   *
+   * The ruts are broken rather than continuous for the same reason the values dropped:
+   * two unbroken parallel lines read as planking. Ruts that stop and start read as wear.
+   */
   const road = new Graphics()
   road.moveTo(ROAD[0].x, ROAD[0].y)
   for (let i = 1; i < ROAD.length; i++) road.lineTo(ROAD[i].x, ROAD[i].y)
-  road.stroke({ width: 60, color: 0x2f2d26, cap: 'round', join: 'round' })
+  road.stroke({ width: 60, color: 0x241f1a, cap: 'round', join: 'round' })
 
   road.moveTo(ROAD[0].x, ROAD[0].y)
   for (let i = 1; i < ROAD.length; i++) road.lineTo(ROAD[i].x, ROAD[i].y)
-  road.stroke({ width: 48, color: 0x45412f, cap: 'round', join: 'round' })
+  road.stroke({ width: 48, color: 0x2c281f, cap: 'round', join: 'round' })
+
+  // Walk the polyline once and scatter wear along it: broken ruts and loose gravel.
+  const segments: { a: Vec2; b: Vec2; len: number }[] = []
+  let roadLen = 0
+  for (let i = 1; i < ROAD.length; i++) {
+    const a = ROAD[i - 1]
+    const b = ROAD[i]
+    const len = Math.hypot(b.x - a.x, b.y - a.y)
+    segments.push({ a, b, len })
+    roadLen += len
+  }
+  const along = (d: number): { x: number; y: number; nx: number; ny: number } => {
+    let left = Math.max(0, Math.min(roadLen - 0.001, d))
+    for (const s of segments) {
+      if (left > s.len) {
+        left -= s.len
+        continue
+      }
+      const t = left / s.len
+      const dx = (s.b.x - s.a.x) / s.len
+      const dy = (s.b.y - s.a.y) / s.len
+      return { x: s.a.x + (s.b.x - s.a.x) * t, y: s.a.y + (s.b.y - s.a.y) * t, nx: -dy, ny: dx }
+    }
+    const last = segments[segments.length - 1]
+    return { x: last.b.x, y: last.b.y, nx: 0, ny: 1 }
+  }
 
   for (const offset of [-11, 11]) {
-    road.moveTo(ROAD[0].x + offset, ROAD[0].y)
-    for (let i = 1; i < ROAD.length; i++) road.lineTo(ROAD[i].x + offset, ROAD[i].y)
-    road.stroke({ width: 7, color: 0x393524, alpha: 0.85, cap: 'round', join: 'round' })
+    let d = rand() * 40
+    while (d < roadLen) {
+      const runLength = 22 + rand() * 46
+      const p = along(d)
+      const q = along(Math.min(roadLen, d + runLength))
+      road
+        .moveTo(p.x + p.nx * offset, p.y + p.ny * offset)
+        .lineTo(q.x + q.nx * offset, q.y + q.ny * offset)
+        .stroke({ width: 6, color: 0x1f1c15, alpha: 0.7, cap: 'round' })
+      d += runLength + 14 + rand() * 40
+    }
   }
+
+  for (let i = 0; i < 120; i++) {
+    const p = along(rand() * roadLen)
+    const side = (rand() - 0.5) * 40
+    road
+      .circle(p.x + p.nx * side, p.y + p.ny * side, 0.8 + rand() * 1.5)
+      .fill({ color: 0x3a352b, alpha: 0.35 + rand() * 0.3 })
+  }
+
   scene.addChild(road)
 
   // Treeline crowding the road, so unlit gaps exist by default.
@@ -416,7 +479,7 @@ export function buildScene(width: number, height: number): BuiltScene {
   const { body, emissive: homeGlow, lights: homeLights } = buildHomestead()
   body.position.set(HOMESTEAD.x, HOMESTEAD.y)
   homeGlow.position.set(HOMESTEAD.x, HOMESTEAD.y)
-  scene.addChild(body)
+  // Handed back rather than added — it belongs in the caller's y-sorted actor layer.
   emissive.addChild(homeGlow)
 
   const lights: Light[] = homeLights.map((l) => ({
@@ -429,5 +492,5 @@ export function buildScene(width: number, height: number): BuiltScene {
   const smoke = new Smoke(HOMESTEAD.x + 60, HOMESTEAD.y - 186)
   scene.addChild(smoke.container)
 
-  return { scene, emissive, lights, smoke }
+  return { scene, homestead: body, emissive, lights, smoke }
 }

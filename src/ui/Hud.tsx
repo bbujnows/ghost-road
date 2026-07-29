@@ -4,6 +4,12 @@ import { TOYS } from '../game/toys'
 import type { ToyId } from '../game/toys'
 import './hud.css'
 
+/**
+ * The light probe is a tuning instrument, not a HUD element (fix-plan, cut list 2). Flip
+ * it on while balancing; the player is meant to read the bands off the board.
+ */
+const SHOW_LIGHT_PROBE = false
+
 const BAND_LABEL = {
   dark: 'dark · invisible, cannot be hurt',
   dim: 'dim · you can see it, not hurt it',
@@ -500,22 +506,17 @@ export function Hud({
               'Click to place it here'
             )}
           </span>
-          <span className={`probe band-${state.bandUnderCursor}`}>
-            under cursor {state.lightUnderCursor.toFixed(2)} — {BAND_LABEL[state.bandUnderCursor]}
-          </span>
+          {/* A superb build tool and a tell that does the player's reading for them. The
+              bands are meant to be learned from the board, so it ships off. */}
+          {SHOW_LIGHT_PROBE && (
+            <span className={`probe band-${state.bandUnderCursor}`}>
+              under cursor {state.lightUnderCursor.toFixed(2)} — {BAND_LABEL[state.bandUnderCursor]}
+            </span>
+          )}
         </div>
         )}
 
         <KaraPanel state={state} />
-
-        <div className="panel controls">
-          {CONTROLS.map((c) => (
-            <div key={c.key} className="control">
-              <kbd>{c.key}</kbd>
-              <span>{c.label}</span>
-            </div>
-          ))}
-        </div>
       </div>
 
       {state.phase === 'break' && state.breakRemaining > 0 && (

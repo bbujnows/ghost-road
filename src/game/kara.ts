@@ -71,10 +71,16 @@ const WHITE_FAR = 0xcfc9bb
 const NOSE = 0x241e1a
 
 /**
- * Drawn large for detail, then scaled down. She stands ~29px at the shoulder against
- * a 96px cabin wall, which is about right for a dog beside a one-storey cabin.
+ * Drawn large for detail, then scaled down.
+ *
+ * **Raised 0.58 → 0.72 on 2026-07-29 (fix-plan F3).** At 0.58 she was ~29px and, in the
+ * recorded session, the hardest actor on screen to find — in several frames she could not
+ * be located without knowing where to look. The whole positioning is *the tower defense
+ * where you watch the dog, not the road*, and that sentence was not true of the thing on
+ * screen. At 0.72 she is ~36px at the shoulder against a 96px cabin wall, still correctly
+ * proportioned for a dog beside a one-storey cabin.
  */
-const SCALE = 0.58
+const SCALE = 0.72
 
 /** How far over she goes on a Show Belly. Just past upside-down, so the belly faces up. */
 const ROLL_ANGLE = Math.PI * 0.86
@@ -487,6 +493,17 @@ export class Kara {
   /** One white paw left sticking out. In the dark it is the only way to find her. */
   private pawOut = new Graphics()
 
+  /**
+   * A soft warmth on the ground under her (fix-plan F3).
+   *
+   * Drawn above the darkness overlay, so she is findable at a glance at any fog density.
+   * It is deliberately warm and deliberately *not* a UI marker: she reads as the one warm
+   * thing in the hollow rather than as a tagged unit. It is also the whole tell that
+   * separates her from a Bone Dog at 36px — the silhouette confusion is good and stays,
+   * because it is the Fetch's foreshadowing, but warmth is something the dead do not have.
+   */
+  private halo = new Graphics()
+
   constructor(x: number, y: number) {
     this.x = x
     this.y = y
@@ -500,8 +517,19 @@ export class Kara {
     this.pawOut.position.set(17, 0)
     this.pawOut.alpha = 0
 
+    // Three rings rather than one, so the falloff reads as light on ground and not as a
+    // flat disc with an edge.
+    for (const [r, a] of [
+      [46, 0.05],
+      [30, 0.05],
+      [17, 0.06],
+    ] as const) {
+      this.halo.ellipse(0, -3, r, r * 0.42).fill({ color: 0xffe6bd, alpha: a })
+    }
+
     this.body.addChild(this.coatRig.root, this.quilt)
-    this.markings.addChild(this.markRig.root, this.pawOut)
+    // Halo first, so she stands on it rather than inside it.
+    this.markings.addChild(this.halo, this.markRig.root, this.pawOut)
   }
 
   /**
@@ -878,8 +906,15 @@ export class Kara {
     // Her white picks up whatever light is nearest and never fully vanishes: in the
     // dark she is four pale paws and a chest moving through the black. On her back it
     // is fully lit by her own reflection, which is the point of the ability.
+    // Her halo breathes with her, and goes out entirely under the blanket — hidden is
+    // hidden, and a glow that survived it would give away the one thing it buys.
+    this.halo.alpha = (1 - this.under) * (this.mode === 'down' ? 0.45 : 1)
+    this.halo.scale.set(1 + Math.sin(this.breath * 0.8) * 0.04)
+
     const lit = lighting.lightAt(this.x, this.y)
-    const glow = Math.max(0.28 + 0.72 * lit, this.roll)
+    // Floor raised 0.28 → 0.42 (fix-plan F3): she is the stated exception to the dark and
+    // should look like it.
+    const glow = Math.max(0.42 + 0.58 * lit, this.roll)
     // Down, her white goes dull. She is still findable — just plainly not in this.
     this.markings.alpha = this.mode === 'down' ? glow * 0.5 : glow
     this.body.alpha = this.mode === 'down' ? 0.75 : 1
