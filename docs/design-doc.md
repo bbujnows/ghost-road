@@ -725,6 +725,59 @@ ending, which is what makes the score mean something.
 **Score** is nights survived, with total bond as the tiebreak. Stored locally. Kara's condition at
 the end of the run is shown alongside the number.
 
+### 8.1 As built (2026-07-29)
+
+Unlocked by holding all seven nights, and it stays unlocked. Every formula above is transcribed
+rather than invented, with **one measured deviation**:
+
+> **Waves cap at 4, not 5.** At five waves a Long Road night measured **6:41**, and §11's
+> five-minute session is a hard constraint — it is the reason this game exists in the shape it does.
+> The doc's own note concedes five waves "still lands near 6 minutes". With four waves and gaps
+> compressed by the speed scaling, nights run **3:37–5:03** all the way out. HP is already the
+> primary wall by §8's own design; it does not need the extra wave to keep rising.
+
+**Spawn gaps now compress with the speed scaling.** Without that a wave gets *longer* as the night
+gets harder — the same spawns at the same spacing, chasing faster enemies down a road they clear
+sooner. Later nights should feel denser, not slower.
+
+Measured across nights 8–30: HP ×1.12 → ×3.76, speed capped at ×1.5 by night 24, fog maxed at 0.95
+by night 16, wind from night 11. **A fully-upgraded Rail Iron strip stops one-shotting a walker at
+night 18** — after that you need two strips on the same body, then three. That is the wall arriving
+where it can be felt rather than as a number in a table.
+
+**The road is generated per run** (consult §7.3), not per night: a new map is worth more to "one
+more run" than a new number, and regenerating nightly would mean the player never learns one.
+
+**The draft is not built.** The consult proposes one toy or ward branch every three nights. Toys are
+already a free per-night choice and every ward branch is already open because stash does not exist,
+so a draft today would offer the player things they already have. It lands with stash.
+
+**Hard-mode scars are not built**, so a run ends the first night it is lost. §8 wants Normal to
+replay the night and Hard to accumulate scars — but a replayable endless has no score, so the
+Normal rule cannot apply here. One life per run is the honest version until Hard exists.
+
+### 8.2 Generating the road
+
+The road is not scenery. Every system is anchored to it — enemies walk it, Cold Iron snaps to its
+angle, Hold clamps to a point on it, the Tallow Man reaches for lanterns near it, and the Night 1
+lesson is that its shape makes lighting all of it unaffordable. So generation is propose-and-check
+against real constraints:
+
+| Constraint | Why |
+| --- | --- |
+| No self-crossing | Two enemies meeting at a crossing looks like a bug, and Hold's `pathT` clamp becomes ambiguous |
+| Segments ≥ 95px | Cold Iron is 90–165px and snaps to the nearest segment; a short one gives it an angle wrong for everything around it |
+| Turns no sharper than ~100° | A doubled-back road puts two stretches in one lantern pool, making light quietly twice as efficient as it is anywhere else |
+| Length 950–1300px | Every pacing number derives from the authored road's 1070px |
+| 150px clear of both edges | A road hugging the edge has nowhere to put a lantern on one side |
+
+Measured over 2000 seeds: **0% fallback, 0 constraint violations**, lengths 950–1300 with a median
+of **1164** against the authored 1070. Generated roads run ~9% longer on average — about three extra
+seconds per traverse, which the wave pacing absorbs.
+
+It falls back to the authored road if the constraints cannot be met inside the retry budget. A
+known-good road always beats one that breaks the systems built on top of it.
+
 ---
 
 ## 9. The ball stash economy

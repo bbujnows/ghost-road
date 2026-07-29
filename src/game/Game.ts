@@ -31,8 +31,10 @@ import { BRANCHES, BRANCHES_FOR } from './balance'
 import type { BranchId, EnemyKind, WardKind } from './balance'
 import { Bloom, Motes, Sparks, Weather, vignette } from './atmosphere'
 import { Bubble } from './bubbles'
-import { Boss, Corpse, spawn } from './enemies'
+import { Boss, Corpse, setEnemyScale, spawn } from './enemies'
 import type { Enemy, EnemyContext } from './enemies'
+import { hpScaleFor, loadBest, longRoadNight, saveBest, speedScaleFor } from './longroad'
+import { generateRoad } from './roadgen'
 import { Kara } from './kara'
 import type { KaraMode, Threat } from './kara'
 import { TOYS, loadoutFor } from './toys'
@@ -40,17 +42,33 @@ import type { ToyId } from './toys'
 import { LightingSystem, bandOf, reachFraction } from './lighting'
 import type { Band, Light } from './lighting'
 import { ColdIron, Lantern } from './wards'
-import { HOMESTEAD, ROAD, buildScene } from './world'
-import type { Smoke } from './world'
+import { AUTHORED_ROAD, HOMESTEAD, ROAD, buildScene, setRoad } from './world'
+import type { Smoke, Vec2 } from './world'
 
 export const WORLD_WIDTH = 1280
 export const WORLD_HEIGHT = 720
 
+/** Seeded RNG, so a Long Road run reproduces its own road and boss order. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function sameRoad(a: Vec2[], b: Vec2[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((p, i) => p.x === b[i].x && p.y === b[i].y)
+}
+
 export type Phase = 'briefing' | 'wave' | 'break' | 'failed' | 'complete'
 export type WardId = WardKind
 
-/** The campaign, or today's seeded night. */
-export type Mode = 'campaign' | 'nightly'
+/** The campaign, today's seeded night, or an endless run. */
+export type Mode = 'campaign' | 'nightly' | 'longroad'
 
 /** One branch of the selected ward, as the HUD needs to draw it. */
 export interface BranchOption {
@@ -94,6 +112,11 @@ export interface GameState {
   nightlyPlayed: boolean
   streak: number
   bestStreak: number
+  /** §8, longroad only. */
+  runNight: number
+  bestRun: number
+  /** The Long Road is locked until the seventh night has been held. */
+  longRoadUnlocked: boolean
   /** 0 on a clear night. */
   fog: number
   /** Seconds to the next gust, or 0 on a still night. */
@@ -169,6 +192,10 @@ export class Game {
 
   private kara!: Kara
   private smoke!: Smoke
+  /** The built world, kept so a generated road can replace it wholesale. */
+  private worldScene = new Container()
+  private worldEmissive = new Container()
+  private worldLights: Light[] = []
   private bloom!: Bloom
   private motes!: Motes
   private weather!: Weather
@@ -198,6 +225,13 @@ export class Game {
   private mode: Mode = 'campaign'
   /** Today's seeded night. Generated once — it does not change while the tab is open. */
   private nightly: NightlyNight = nightlyFor()
+
+  /** §8. The endless run: which night, and the seed its road and bosses came from. */
+  private runNight = 8
+  private runRng: () => number = () => 0
+  private longNight: NightSpec | null = null
+  /** Set once the campaign has been held all seven nights — §8 gates endless on it. */
+  private campaignCleared = false
   /** §4. The toy for the coming night, chosen on the briefing. */
   private toy: ToyId = 'rope'
   /** Seconds to the next gust. 0 on a still night. */
@@ -244,6 +278,9 @@ export class Game {
     this.lighting = new LightingSystem(WORLD_WIDTH, WORLD_HEIGHT)
 
     const built = buildScene(WORLD_WIDTH, WORLD_HEIGHT)
+    this.worldScene = built.scene
+    this.worldEmissive = built.emissive
+    this.worldLights = built.lights
     this.scene.addChild(built.scene)
     this.smoke = built.smoke
 
@@ -507,9 +544,24 @@ export class Game {
     // curtains send you back to the campaign, which is the thing you *can* play again.
     if (this.mode === 'nightly') {
       this.mode = 'campaign'
+      this.layRoad(AUTHORED_ROAD)
       this.retryNight()
       return
     }
+
+    // §8: a Long Road night held moves the run on; a night lost ends the run, which is
+    // what makes the number mean anything. A new run gets a new road.
+    if (this.mode === 'longroad') {
+      if (this.phase === 'complete') {
+        this.runNight += 1
+        this.longNight = longRoadNight(this.runNight, this.runRng)
+      } else {
+        this.beginRun()
+      }
+      this.retryNight()
+      return
+    }
+
     if (this.phase === 'complete') this.nextNight()
     else this.retryNight()
   }
@@ -804,7 +856,9 @@ export class Game {
   }
 
   private get night(): NightSpec {
-    return this.mode === 'nightly' ? this.nightly : NIGHTS[this.nightIndex]
+    if (this.mode === 'nightly') return this.nightly
+    if (this.mode === 'longroad') return this.longNight ?? NIGHTS[0]
+    return NIGHTS[this.nightIndex]
   }
 
   /**
@@ -813,10 +867,60 @@ export class Game {
    */
   setMode(mode: Mode) {
     if (this.phase !== 'briefing' || mode === this.mode) return
+    if (mode === 'longroad' && !this.campaignCleared) return
+
     this.mode = mode
     // Today's night may have rolled over while the tab sat open.
     if (mode === 'nightly') this.nightly = nightlyFor()
+    if (mode === 'longroad') this.beginRun()
+    else this.layRoad(AUTHORED_ROAD)
+
     this.retryNight()
+  }
+
+  /**
+   * §8. A fresh endless run: a new seed, and with it a new road through the hollow.
+   *
+   * The road is per *run*, not per night — that is the consult's point. A new map is
+   * worth more to "one more run" than a new number, and regenerating it every night
+   * would mean the player never learns one.
+   */
+  private beginRun() {
+    const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0
+    this.runRng = mulberry32(seed)
+    this.runNight = 8
+    this.layRoad(generateRoad(this.runRng, { x: HOMESTEAD.x, y: HOMESTEAD.y + 5 }, AUTHORED_ROAD))
+    this.longNight = longRoadNight(this.runNight, this.runRng)
+  }
+
+  /**
+   * Swap the road under the world and rebuild the scene around it.
+   *
+   * Only ever called with an empty board. `setRoad` replaces the array's *contents*, so
+   * every enemy already holding it as a path keeps a valid reference — but it keeps its
+   * path *index* too, which would put it somewhere arbitrary on the new shape.
+   */
+  private layRoad(points: Vec2[]) {
+    if (sameRoad(ROAD, points)) return
+
+    setRoad(points)
+
+    for (const light of this.worldLights) this.lighting.remove(light)
+    this.scene.removeChild(this.worldScene)
+    this.worldScene.destroy({ children: true })
+    this.bloom.source.removeChild(this.worldEmissive)
+    this.worldEmissive.destroy({ children: true })
+
+    const built = buildScene(WORLD_WIDTH, WORLD_HEIGHT)
+    this.worldScene = built.scene
+    this.worldEmissive = built.emissive
+    this.worldLights = built.lights
+    this.smoke = built.smoke
+
+    // Back to the bottom of the scene, under everything that was placed on it.
+    this.scene.addChildAt(built.scene, 0)
+    this.bloom.source.addChildAt(built.emissive, 0)
+    for (const light of built.lights) this.lighting.add(light)
   }
 
   private queueWave(index: number) {
@@ -888,6 +992,14 @@ export class Game {
     this.oil = this.night.startingOil
     this.lighting.fogDensity = this.night.fog
     this.gustTimer = this.night.wind
+
+    // §8. Set before the first spawn, and reset to 1 outside the Long Road so a campaign
+    // night after an endless run is not quietly carrying its scaling.
+    if (this.mode === 'longroad') {
+      setEnemyScale(hpScaleFor(this.runNight), speedScaleFor(this.runNight))
+    } else {
+      setEnemyScale(1, 1)
+    }
     this.waveIndex = 0
     this.spawnQueue = []
     this.breakTimer = 4
@@ -901,7 +1013,8 @@ export class Game {
   /** Advance to the next night, or finish the campaign. */
   private nextNight() {
     if (this.nightIndex >= NIGHTS.length - 1) {
-      // Nothing after the seventh. Endless is build-order step 8.
+      // §8: holding the seventh is what unlocks the Long Road, and it stays unlocked.
+      this.campaignCleared = true
       this.nightIndex = 0
     } else {
       this.nightIndex += 1
@@ -916,7 +1029,12 @@ export class Game {
     try {
       localStorage.setItem(
         Game.SAVE_KEY,
-        JSON.stringify({ night: this.nightIndex, wave: this.waveIndex, toy: this.toy }),
+        JSON.stringify({
+          night: this.nightIndex,
+          wave: this.waveIndex,
+          toy: this.toy,
+          cleared: this.campaignCleared,
+        }),
       )
     } catch {
       // Private browsing, a full quota, a locked-down work machine. Losing the save is
@@ -928,11 +1046,12 @@ export class Game {
     try {
       const raw = localStorage.getItem(Game.SAVE_KEY)
       if (!raw) return
-      const parsed = JSON.parse(raw) as { night?: unknown; toy?: unknown }
+      const parsed = JSON.parse(raw) as { night?: unknown; toy?: unknown; cleared?: unknown }
       const n = typeof parsed.night === 'number' ? parsed.night : 0
       // Clamp rather than trust: the file is user-editable and the roster is not.
       this.nightIndex = Math.max(0, Math.min(NIGHTS.length - 1, Math.floor(n)))
       if (TOYS.some((t) => t.id === parsed.toy)) this.toy = parsed.toy as ToyId
+      this.campaignCleared = parsed.cleared === true
     } catch {
       this.nightIndex = 0
     }
@@ -1072,6 +1191,8 @@ export class Game {
       // Losing is the only thing that resets a streak. An unresolved attempt — a closed
       // laptop, a crashed tab — merely fails to advance it.
       if (this.mode === 'nightly') recordLost(this.nightly.key)
+      // §8: the run ends here. The score is the night you did not survive, minus one.
+      if (this.mode === 'longroad') saveBest(this.runNight - 1)
     } else if (this.phase === 'wave' && !this.spawnQueue.length && !this.enemies.length) {
       // §9 income floor: clearing a wave pays regardless of how it was cleared.
       this.oil += OIL_PER_WAVE
@@ -1082,6 +1203,7 @@ export class Game {
       if (this.waveIndex >= this.night.waves.length) {
         this.phase = 'complete'
         if (this.mode === 'nightly') recordHeld(this.nightly.key)
+        if (this.mode === 'longroad') saveBest(this.runNight)
       } else {
         this.breakTimer = WAVE_BREAK
         this.phase = 'break'
@@ -1160,6 +1282,9 @@ export class Game {
       nightlyPlayed: record.attempted === this.nightly.key,
       streak: record.streak,
       bestStreak: record.best,
+      runNight: this.runNight,
+      bestRun: loadBest(),
+      longRoadUnlocked: this.campaignCleared,
       night: night.n,
       nightCount: NIGHTS.length,
       nightName: night.name,

@@ -68,6 +68,20 @@ export interface EnemyContext {
   lie: (x: number, y: number, seconds: number) => void
 }
 
+/**
+ * §8 endless escalation, applied at construction.
+ *
+ * Module-level rather than threaded through every constructor because it is a property
+ * of *the night*, not of any enemy — and because every subclass would otherwise have to
+ * remember to pass it through, which is exactly the kind of thing one of them would
+ * silently forget. Set it when a night starts; it stays put until the next one.
+ */
+let scale = { hp: 1, speed: 1 }
+
+export function setEnemyScale(hp: number, speed: number) {
+  scale = { hp, speed }
+}
+
 export abstract class Enemy {
   x: number
   y: number
@@ -110,9 +124,9 @@ export abstract class Enemy {
   protected offRoad = false
 
   constructor(stats: { hp: number; speed: number; porchDamage: number }) {
-    this.hp = stats.hp
-    this.maxHp = stats.hp
-    this.speed = stats.speed
+    this.hp = stats.hp * scale.hp
+    this.maxHp = this.hp
+    this.speed = stats.speed * scale.speed
     this.porchDamage = stats.porchDamage
     this.x = ROAD[0].x
     this.y = ROAD[0].y

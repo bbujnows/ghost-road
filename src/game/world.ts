@@ -22,8 +22,11 @@ export interface Vec2 {
  *    defending must always be legible, the same way Kara's white markings must be.
  */
 
-/** ~1070px end to end. A Road Walker at 30 px/s crosses it in about 35 seconds. */
-export const ROAD: Vec2[] = [
+/**
+ * The authored road. ~1070px end to end — a Road Walker at 30 px/s crosses it in about
+ * 35 seconds, and **every pacing number in the game is derived from that figure.**
+ */
+export const AUTHORED_ROAD: Vec2[] = [
   { x: 680, y: -60 },
   { x: 650, y: 90 },
   { x: 510, y: 200 },
@@ -33,6 +36,21 @@ export const ROAD: Vec2[] = [
   { x: 760, y: 560 },
   { x: 640, y: 645 },
 ]
+
+/**
+ * The road in play. The Long Road generates a new one per run, so this cannot be a fixed
+ * literal any more — but it **must stay the same array object for the life of the page.**
+ * `Enemy` captures it by reference as its path, so `setRoad()` replaces the contents in
+ * place rather than rebinding. Reassigning would leave every live enemy walking a road
+ * that no longer exists.
+ */
+export const ROAD: Vec2[] = AUTHORED_ROAD.map((p) => ({ ...p }))
+
+/** Only safe with an empty board: anything mid-walk keeps its path index, not its place. */
+export function setRoad(points: Vec2[]) {
+  ROAD.length = 0
+  for (const p of points) ROAD.push({ ...p })
+}
 
 export const HOMESTEAD: Vec2 = { x: 640, y: 640 }
 

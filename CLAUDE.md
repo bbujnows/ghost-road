@@ -4,7 +4,7 @@ An Appalachian folk-horror tower defense. Seven nights defending a homestead at 
 abandoned logging road. **Kara — a gold Labrador/pit mix with white paws, belly, and chest — is
 the centerpiece of the design, not a bonus unit.**
 
-## Status: build order steps 1–7 built (campaign spine)
+## Status: the consult's build order is complete (steps 1–8)
 
 The roadmap in use is **§9 of [docs/redesign-consult.md](docs/redesign-consult.md)**, adopted
 2026-07-27, which supersedes §13 of the design doc.
@@ -16,14 +16,22 @@ Crawler, Tallow Man, Bone Dog, The Unseen) · ward upgrade branches · **all sev
 bosses on 3/5/7, per-night fog and wind, and `localStorage` progress · lamp oil, homestead HP,
 Normal-mode retry.
 
-The toy loadout ships with four of the doc's eight toys, including Hold on the Rope. **The Nightly
-Road** is in: one seeded night per calendar day, the same for everyone, one attempt, a local streak.
+The toy loadout ships with four of the doc's eight toys, including Hold on the Rope. **Three modes:**
+the seven-night campaign, the Nightly Road (one date-seeded night a day, one attempt, a streak), and
+the Long Road (endless from night 8, with a road generated per run — unlocked by holding all seven).
 
-Next: the second half of step 8 — **the Long Road** (endless, with a procedurally generated road).
+**The roadmap is done.** What remains is the deferred pile, and it is no longer ordered by a build
+order — pick by what the game needs. In rough order of what it is missing most:
 
-Not built: the other wards (salt, bell, spring line, bottle tree, fiddler), the Drownd Girl, Hant
-Cat, Hollow Kin, Snallygaster and Fetch, bond, stash, Hard mode, endless, audio. Do not add them
-ahead of the build order.
+1. **The bark** (§10). It is the emotional payload of the whole design and the reason the audio mix
+   exists, and it is still unbuilt. Everything else in audio waits on it.
+2. **Bond and the ball stash** (§3.4, §3.5, §9) — the between-night layer. The draft, four toys, and
+   the Nightly Road's unlock economy all wait on stash.
+3. **Hard mode's scars** (§7.2). Without them a Long Road run ends on the first loss.
+4. **The remaining wards** — salt, bell, spring line, bottle tree, fiddler. The Bottle Tree also
+   makes the Tallow Man's light resist live for the first time.
+5. **The blocked bosses** — Snallygaster (aerial pathing), Drownd Girl (salt + water + light damage),
+   the Fetch. Each is one system away.
 
 **Four toys are blocked, not cut** — Ragged Fox needs bond, Tennis Ball needs the ball drop and
 stash, the Squeaker needs the bark, the Stuffed Duck needs the spring line. Shipping a toy whose
@@ -100,6 +108,8 @@ src/game/
   lighting.ts   the lightmap, the three bands, lightAt() and radiusForThreshold()
   nights.ts     the seven nights — wave tables, fog, wind, starting oil
   nightly.ts    the date-seeded daily night, and the streak record
+  longroad.ts   endless escalation (doc §8 formulas) and the high-water mark
+  roadgen.ts    procedural roads, propose-and-check against real constraints
   toys.ts       the toy roster, and Loadout — every Kara stat a toy can change
   enemies.ts    Enemy and Boss base classes + the whole roster + Corpse
   wards.ts      Lantern (pure light, snuffable) and ColdIron (damage, only in light)
@@ -199,6 +209,10 @@ native binary downloaded corrupt. Fix with `npm install lightningcss-win32-x64-m
   Reading `BUBBLES.maxCharges` where the Sock Monkey is meant to apply is a bug that stays invisible
   until someone wonders why a toy does nothing. `loadoutFor()` resolves the toy to plain numbers
   once, at the start of a night.
+- **`world.ts`'s `ROAD` must stay the same array object for the life of the page.** `Enemy` captures
+  it by reference as its path, so `setRoad()` replaces the *contents* in place. Rebinding the export
+  would leave every live enemy walking a road that no longer exists. It is also only safe with an
+  empty board — an enemy mid-walk keeps its path *index*, not its place.
 - **`nightly.ts` must stay deterministic in its date key.** Nothing in the generator may read
   `Math.random()` or `Date.now()` — the same key has to produce the same night on every machine, and
   a single stray call makes the daily uncomparable in a way no test will notice.

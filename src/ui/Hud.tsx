@@ -187,6 +187,30 @@ function NightlyBrief({ state }: { state: GameState }) {
 }
 
 /**
+ * §8. Where the run stands, and what the escalation has already done to the roster.
+ *
+ * The scaling is stated rather than hidden. A player who cannot see that enemies have
+ * 60% more health does not experience escalation, they experience their build getting
+ * quietly worse.
+ */
+function LongRoadBrief({ state }: { state: GameState }) {
+  const step = state.runNight - 7
+  const hp = Math.round(0.12 * step * 100)
+  const speed = Math.round((Math.min(1.5, 1 + 0.03 * step) - 1) * 100)
+
+  return (
+    <div className="draw longroad-brief">
+      <span className="draw-chip">night {state.runNight}</span>
+      <span className="draw-chip">+{hp}% health</span>
+      {speed > 0 && <span className="draw-chip">+{speed}% speed</span>}
+      {state.fog > 0 && <span className="draw-chip">fog {Math.round(state.fog * 100)}%</span>}
+      {state.gustIn > 0 && <span className="draw-chip">wind</span>}
+      {state.bestRun > 0 && <span className="draw-chip best">furthest {state.bestRun}</span>}
+    </div>
+  )
+}
+
+/**
  * The upgrade tree for whichever placed ward is selected.
  *
  * Two branches, and taking a tier in one closes the other for good — so the panel has
@@ -380,7 +404,9 @@ export function Hud({
           <span className="label">
             {state.mode === 'nightly'
               ? `Nightly · ${state.nightlyKey}`
-              : `${state.nightName} · ${state.night}/${state.nightCount}`}
+              : state.mode === 'longroad'
+                ? `Long Road · Night ${state.runNight}`
+                : `${state.nightName} · ${state.night}/${state.nightCount}`}
           </span>
           <span className="value">
             Wave {state.wave} / {state.waveCount}
@@ -520,12 +546,28 @@ export function Hud({
                 The Nightly Road
                 {state.streak > 0 && <span className="streak">{state.streak}</span>}
               </button>
+              {/* Locked rather than hidden: §8 gates it on holding all seven, and a
+                  player should be able to see what they are working toward. */}
+              <button
+                type="button"
+                className={`mode ${state.mode === 'longroad' ? 'on' : ''} ${state.longRoadUnlocked ? '' : 'locked'}`}
+                disabled={!state.longRoadUnlocked}
+                onClick={() => onSetMode('longroad')}
+                title={state.longRoadUnlocked ? undefined : 'Hold all seven nights first'}
+              >
+                The Long Road
+                {state.longRoadUnlocked && state.bestRun > 0 && (
+                  <span className="streak">{state.bestRun}</span>
+                )}
+              </button>
             </div>
 
             <p className="eyebrow">
               {state.mode === 'nightly'
                 ? `Ghost Road · ${state.nightlyKey}`
-                : `Ghost Road · ${state.nightName} · ${state.night} of ${state.nightCount}`}
+                : state.mode === 'longroad'
+                  ? `Ghost Road · The Long Road · Night ${state.runNight}`
+                  : `Ghost Road · ${state.nightName} · ${state.night} of ${state.nightCount}`}
             </p>
             <h1>{state.nightLede}</h1>
             <p className="lede">{state.nightTeaches}</p>
@@ -540,7 +582,10 @@ export function Hud({
             {state.mode === 'nightly' ? (
               <NightlyBrief state={state} />
             ) : (
-              <ToyPicker toy={state.toy} onChoose={onChooseToy} />
+              <>
+                {state.mode === 'longroad' && <LongRoadBrief state={state} />}
+                <ToyPicker toy={state.toy} onChoose={onChooseToy} />
+              </>
             )}
 
             {state.mode === 'nightly' && state.nightlyPlayed ? (
@@ -621,6 +666,31 @@ export function Hud({
           sub={`${state.streak} night${state.streak === 1 ? '' : 's'} in a row.${state.streak >= state.bestStreak ? ' Your best yet.' : ` Best: ${state.bestStreak}.`}`}
           action="Back to the seven nights"
           hint="A new road at midnight"
+          onAction={onRestart}
+        />
+      )}
+
+      {/* §8: a run has a definite ending, which is what makes the number mean anything. */}
+      {state.phase === 'failed' && state.mode === 'longroad' && (
+        <Curtain
+          title={`The run ends at night ${state.runNight}.`}
+          sub={
+            state.runNight - 1 >= state.bestRun
+              ? `${state.runNight - 1} nights held — further than you have been.`
+              : `${state.runNight - 1} nights held. Furthest: ${state.bestRun}.`
+          }
+          action="Walk a new road"
+          hint="A different hollow every run"
+          onAction={onRestart}
+        />
+      )}
+
+      {state.phase === 'complete' && state.mode === 'longroad' && (
+        <Curtain
+          title="Dawn."
+          sub={`Night ${state.runNight} held. The road keeps going.`}
+          action={`On to night ${state.runNight + 1}`}
+          hint="or press R"
           onAction={onRestart}
         />
       )}

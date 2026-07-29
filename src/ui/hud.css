@@ -336,6 +336,20 @@ kbd {
   color: #8fa9b8;
 }
 
+.mode.locked {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.longroad-brief {
+  margin-bottom: 16px;
+}
+
+.draw-chip.best {
+  border-color: rgba(255, 192, 120, 0.4);
+  color: #ffc078;
+}
+
 .streak-line {
   margin: 4px 0 0;
   font-size: 12px;
