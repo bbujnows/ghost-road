@@ -42,6 +42,8 @@ export default function App() {
   const chooseToy = useCallback((id: ToyId) => gameRef.current?.chooseToy(id), [])
   const setMode = useCallback((m: Mode) => gameRef.current?.setMode(m), [])
   const toggleAudio = useCallback(() => void gameRef.current?.toggleAudio(), [])
+  const buy = useCallback((id: string) => gameRef.current?.buy(id), [])
+  const toggleFetching = useCallback(() => gameRef.current?.toggleFetching(), [])
 
   return (
     <div className="app">
@@ -60,6 +62,8 @@ export default function App() {
           onChooseToy={chooseToy}
           onSetMode={setMode}
           onToggleAudio={toggleAudio}
+          onBuy={buy}
+          onToggleFetching={toggleFetching}
         />
       </div>
     </div>

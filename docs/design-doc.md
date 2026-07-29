@@ -280,6 +280,39 @@ Maximum realistic accrual is ~14–16/night. **Reaching T5 by Night 7 requires n
 across the whole campaign**, which is the intent — Lead is a reward for having actually looked
 after her, not a scheduled unlock.
 
+### 3.4a As built (2026-07-29)
+
+`src/game/progression.ts`. Measured across a seven-night campaign:
+
+| Play | Bond by Night 7 | Tier |
+| --- | --- | --- |
+| Throws the ball, never lets her get hurt, feeds her | **100** | 4 |
+| Throws it, takes some damage, feeds from Night 3 | 76 | 3 |
+| Ignores the ball, she goes Down once a night | **0** | 0 |
+| Fetching turned off entirely | 56 | 2 |
+
+Perfect play accrues **14.3/night**, which is §3.4's stated 14–16, and reaches the top tier exactly
+at Night 7 — the intended shape.
+
+> **Open question raised by the measurement.** Rough play nets **−2 a night** and never leaves tier
+> zero, so a struggling player sees nothing of this system across the whole campaign. That is the
+> doc's own arithmetic — `rest +5` is exactly cancelled by one `Down −5`, leaving the ignored ball's
+> −2 as the entire result — and it is a knife edge rather than a slope. Left as written rather than
+> quietly retuned: "look after her badly, get nothing" is a coherent design, and only play can say
+> whether it reads as a punishment or as a dead system. Flagged in §12.2.
+
+**Bond is held in escrow for the length of a night and committed only when the night is held.** The
+consult (§6) caught the exploit before it existed: retrying a failed night keeps stash but must not
+keep bond, or deliberate failure becomes a bond farm — throw the ball, walk into the porch, repeat.
+
+**Lead (T4) is not built.** It needs fog manipulation on Night 7, and it is the one tier that gates a
+nameable ability rather than a quality of the dog.
+
+**The ball and fetching are the same currency, and it is not oil.** Both cost *her being somewhere
+else*. That is the whole design of this layer: progression is bought with presence, and a player who
+wants both has to decide when they can spare her. The round trip is emergent from distance rather
+than a timer — a ball thrown further costs more, and the cost is visible as her crossing the yard.
+
 ### 3.5 The dropped ball
 
 At semi-random moments — weighted to be *inconvenient*, i.e. 2–4s after a wave begins — Kara drops
@@ -952,7 +985,14 @@ its **positioning**: the hook is the dog, the light is the terrain, the horror i
 5. **Is `KARA.healPerWave = 25` right, or should she heal fully between waves?** Invented in the
    counterplay pass because nothing else can heal her yet (§3.1). Full healing removes the
    consequence; none at all reintroduces a death spiral. 25 is a guess that needs a session.
-6. **Is the Nightly Road's one-attempt rule too strict?** The attempt is marked on the way in, so a
+6. **Does bond's knife edge read as punishment or as a dead system?** A player who ignores the ball
+   and lets her go Down once a night nets −2 and never leaves tier zero — `rest +5` is exactly
+   cancelled by one `Down −5`. If it reads as the system ignoring them rather than judging them,
+   raise `rest` to 7 or soften `Down` to −3. See §3.4a.
+7. **Does anyone ever turn fetching off?** §9 calls it the most consequential toggle in the game.
+   Measured, leaving it on for seven nights banks 94 stash against a 72-cost shop, so nothing is
+   pushing on the decision except her absence itself. Watch whether that is enough on its own.
+8. **Is the Nightly Road's one-attempt rule too strict?** The attempt is marked on the way in, so a
    crashed tab burns the day. That is what makes the streak worth anything, but it means the game
    can take a day away for a reason that has nothing to do with the hollow. The alternative —
    preserving in-progress state the way Wordle does — is more code and more places to be wrong.

@@ -2,6 +2,7 @@ import type { GameState } from '../game/Game'
 import { OIL_PER_LIT_KILL, OIL_PER_WAVE } from '../game/balance'
 import { TOYS } from '../game/toys'
 import type { ToyId } from '../game/toys'
+import { TIERS } from '../game/progression'
 import './hud.css'
 
 /**
@@ -24,6 +25,8 @@ const CONTROLS = [
   { key: 'X', label: 'Show Belly' },
   { key: 'B', label: 'Bubble at cursor' },
   { key: 'Z', label: 'Under the blanket' },
+  { key: 'T', label: 'Throw the ball she dropped' },
+  { key: 'G', label: 'Fetching on / off' },
   { key: 'F', label: 'Fast-forward' },
   { key: 'Space', label: 'Pause' },
   { key: '?', label: 'Help' },
@@ -56,7 +59,13 @@ const KARA_STATE: Partial<Record<GameState['karaState'], string>> = {
  * hurt her, and a player who cannot see the damage landing will read her going Down as
  * the game taking her away rather than as something they were shown coming.
  */
-function KaraPanel({ state }: { state: GameState }) {
+function KaraPanel({
+  state,
+  onToggleFetching,
+}: {
+  state: GameState
+  onToggleFetching: () => void
+}) {
   const hpPct = (state.karaHp / state.karaMaxHp) * 100
   const note = KARA_STATE[state.karaState]
 
@@ -109,6 +118,19 @@ function KaraPanel({ state }: { state: GameState }) {
         </div>
       )}
 
+      {/* §9. Turning fetching off costs progression and buys presence — the doc calls it
+          the single most consequential toggle in the game, so it lives on her panel. */}
+      <div
+        className={`ability ${state.fetching ? 'ready' : 'cooling'} toggle`}
+        onClick={onToggleFetching}
+      >
+        <kbd>G</kbd>
+        <span className="ability-name">Fetching</span>
+        <span className="ability-state">
+          {state.fetching ? (state.stashOwed > 0 ? `${state.stashOwed} out there` : 'on') : 'off'}
+        </span>
+      </div>
+
       <div className={`ability ${state.karaState === 'free' ? 'ready' : 'cooling'}`}>
         <kbd>Z</kbd>
         <span className="ability-name">Blanket</span>
@@ -130,21 +152,85 @@ function KaraPanel({ state }: { state: GameState }) {
  * Every one of them names its cost on the card. A toy that is only upside is a toy that
  * is mandatory, and a mandatory choice is not one.
  */
-function ToyPicker({ toy, onChoose }: { toy: ToyId; onChoose: (id: ToyId) => void }) {
+function ToyPicker({
+  toy,
+  owned,
+  onChoose,
+}: {
+  toy: ToyId
+  owned: ToyId[]
+  onChoose: (id: ToyId) => void
+}) {
   return (
     <div className="toys">
       <p className="eyebrow">What she takes out with her</p>
-      {TOYS.map((t) => (
+      {TOYS.map((t) => {
+        const have = owned.includes(t.id)
+        return (
+          <button
+            key={t.id}
+            type="button"
+            className={`toy ${toy === t.id ? 'chosen' : ''} ${have ? '' : 'locked'}`}
+            disabled={!have}
+            onClick={() => onChoose(t.id)}
+          >
+            <span className="toy-name">
+              {t.name}
+              {!have && <span className="toy-locked"> — buy it with stash</span>}
+            </span>
+            <span className="toy-effect">{t.effect}</span>
+            {t.cost && <span className="toy-cost">{t.cost}</span>}
+            <span className="toy-flavor">{t.flavor}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * §3.4 / §9. What she has earned, and what it buys.
+ *
+ * Bond and stash are shown side by side deliberately: they come from the same currency —
+ * her being somewhere other than where you need her — and the player should see that they
+ * are competing for it.
+ */
+function StashPanel({ state, onBuy }: { state: GameState; onBuy: (id: string) => void }) {
+  const next = TIERS[state.bondTier]
+
+  return (
+    <div className="toys">
+      <p className="eyebrow">Between the nights</p>
+
+      <div className="ledger">
+        <span className="ledger-item">
+          <span className="ledger-value">{state.bond}</span> bond
+          {state.bondTier > 0 && <span className="sub"> · tier {state.bondTier}</span>}
+        </span>
+        <span className="ledger-item">
+          <span className="ledger-value">{state.stash}</span> stash
+        </span>
+      </div>
+
+      {next && (
+        <p className="streak-line">
+          At {next.at}: <strong>{next.name}</strong> <span className="sub">— {next.effect}</span>
+        </p>
+      )}
+
+      {state.shop.map((s) => (
         <button
-          key={t.id}
+          key={s.id}
           type="button"
-          className={`toy ${toy === t.id ? 'chosen' : ''}`}
-          onClick={() => onChoose(t.id)}
+          className={`branch ${s.affordable ? 'affordable' : ''} ${s.owned ? 'closed' : ''}`}
+          disabled={!s.affordable}
+          onClick={() => onBuy(s.id)}
         >
-          <span className="toy-name">{t.name}</span>
-          <span className="toy-effect">{t.effect}</span>
-          {t.cost && <span className="toy-cost">{t.cost}</span>}
-          <span className="toy-flavor">{t.flavor}</span>
+          <div className="branch-head">
+            <span className="branch-name">{s.name}</span>
+            <span className="branch-cost">{s.owned ? 'done' : s.cost}</span>
+          </div>
+          <span className="branch-note">{s.detail}</span>
         </button>
       ))}
     </div>
@@ -283,6 +369,8 @@ export interface HudProps {
   onChooseToy: (id: ToyId) => void
   onSetMode: (mode: GameState['mode']) => void
   onToggleAudio: () => void
+  onBuy: (id: string) => void
+  onToggleFetching: () => void
 }
 
 /**
@@ -400,6 +488,8 @@ export function Hud({
   onChooseToy,
   onSetMode,
   onToggleAudio,
+  onBuy,
+  onToggleFetching,
 }: HudProps) {
   if (!state) return null
 
@@ -528,8 +618,17 @@ export function Hud({
         </div>
         )}
 
-        <KaraPanel state={state} />
+        <KaraPanel state={state} onToggleFetching={onToggleFetching} />
       </div>
+
+      {/* §3.5. She has dropped a ball and is looking at you, in the middle of a wave,
+          which is exactly when it is least convenient. That is the design. */}
+      {state.ballOut && (
+        <div className="ball-prompt">
+          She dropped a ball at your feet. <kbd>T</kbd> to throw it
+          <span className="sub"> — {Math.ceil(state.ballSecondsLeft)}s</span>
+        </div>
+      )}
 
       {state.phase === 'break' && state.breakRemaining > 0 && (
         <div className="banner">
@@ -597,7 +696,8 @@ export function Hud({
             ) : (
               <>
                 {state.mode === 'longroad' && <LongRoadBrief state={state} />}
-                <ToyPicker toy={state.toy} onChoose={onChooseToy} />
+                <ToyPicker toy={state.toy} owned={state.ownedToys} onChoose={onChooseToy} />
+                <StashPanel state={state} onBuy={onBuy} />
               </>
             )}
 

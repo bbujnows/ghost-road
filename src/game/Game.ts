@@ -40,6 +40,17 @@ import { Kara } from './kara'
 import type { KaraMode, Threat } from './kara'
 import { TOYS, loadoutFor } from './toys'
 import type { ToyId } from './toys'
+import {
+  BOND,
+  FETCH_SECONDS,
+  KILLS_PER_FETCH,
+  MAX_OIL_UPGRADES,
+  SHOP,
+  loadProgress,
+  saveProgress,
+  tierOf,
+} from './progression'
+import type { Progress } from './progression'
 import { LightingSystem, bandOf, reachFraction } from './lighting'
 import type { Band, Light } from './lighting'
 import { ColdIron, Lantern } from './wards'
@@ -151,6 +162,24 @@ export interface GameState {
   karaStateRemaining: number
   /** §4. The toy equipped for this night. */
   toy: ToyId
+  /** §4/§9. Toys unlocked with stash. The Rope is free. */
+  ownedToys: ToyId[]
+  /** §3.4. Committed bond, and what this night has earned but not yet banked. */
+  bond: number
+  bondTier: number
+  pendingBond: number
+  /** §9. */
+  stash: number
+  /** Owed but not yet carried back — she still has to go and get it. */
+  stashOwed: number
+  fetching: boolean
+  /** §3.5. True while a ball is on the ground and she is looking at you. */
+  ballOut: boolean
+  ballSecondsLeft: number
+  /** Non-null while she is away doing something that is not defending the homestead. */
+  errand: 'ball' | 'fetch' | null
+  /** What stash can buy tonight, already priced against what is owned. */
+  shop: { id: string; name: string; detail: string; cost: number; owned: boolean; affordable: boolean }[]
   /** Only true on a night the Rope is equipped — Hold does not otherwise exist. */
   hasHold: boolean
   holdReady: boolean
@@ -215,6 +244,31 @@ export class Game {
   private audio = new Audio()
   /** §10: once per night, maximum. This is the whole rate limit. */
   private barked = false
+
+  /** §3.4 / §9. Bond, stash, toys and permanent purchases. Survives everything. */
+  private progress: Progress = loadProgress()
+  /**
+   * §3.4, and the consult's §6 exploit note: **bond earned during a night is held here
+   * and only committed when the night is held.** Stash commits immediately and is kept on
+   * a retry, deliberately; bond is not, or deliberate failure becomes a bond farm — throw
+   * the ball, walk into the porch, repeat.
+   */
+  private pendingBond = 0
+  /** §9: one item per three kills. */
+  private killsToward = 0
+  /** §9: the single most consequential toggle in the game. */
+  private fetching = true
+  /** §3.4: +8 for finishing a night without her taking a scratch. */
+  private karaUnhurt = true
+  /** §3.5: the ball drops once a night, at a moment chosen to be inconvenient. */
+  private ballDue = false
+  private ballAt = 0
+  /** Which wave she drops it on. Rolled per night so it is never the same beat twice. */
+  private ballWave = 0
+  /** §9: feeding is once a night, or bond is just stash with extra steps. */
+  private fedTonight = false
+  /** §9: stash owed but not yet carried back. She has to actually go and get it. */
+  private stashOwed = 0
   private enemies: Enemy[] = []
   private corpses: Corpse[] = []
   private lanterns: Lantern[] = []
@@ -433,6 +487,10 @@ export class Game {
         this.blowBubble()
       } else if (key === 'z') {
         this.blanket()
+      } else if (key === 't') {
+        this.throwBall()
+      } else if (key === 'g') {
+        this.toggleFetching()
       } else if (key === 'h' && this.kara.loadout.hold) {
         // Only when the Rope is equipped — otherwise H stays the help key it has been.
         this.hold()
@@ -541,6 +599,15 @@ export class Game {
   blanket() {
     if (this.inputLocked) return
     this.kara.blanket()
+  }
+
+  /**
+   * §3.5. Throw the ball she dropped. She goes where the cursor is, which is the point:
+   * the player chooses how far out of position the +3 bond costs her.
+   */
+  throwBall() {
+    if (this.inputLocked) return
+    this.kara.throwBall(this.pointer.x, this.pointer.y)
   }
 
   /** §3.2 Hold. Only exists on a night the Rope is equipped. */
@@ -998,6 +1065,15 @@ export class Game {
   }
 
   private queueWave(index: number) {
+    // §3.5: 2–4s after a wave begins, once a night, and the doc is explicit that the
+    // timing must not be fair. The consult flagged the frequency as a playtest question —
+    // "once a night is a moment; once a wave is a nag" — so it is once a night, on a
+    // wave picked at random rather than always the first.
+    if (index === this.ballWave) {
+      this.ballDue = true
+      this.ballAt = this.elapsed + 2 + Math.random() * 2
+    }
+
     this.spawnQueue = []
     for (const group of this.night.waves[index].groups) {
       for (let i = 0; i < group.count; i++) {
@@ -1060,10 +1136,13 @@ export class Game {
     // §7.2: the Nightly Road offers a fixed loadout. Everyone gets the same toy, so it
     // is part of the day's puzzle rather than a lever the player pulls.
     const toy = this.mode === 'nightly' ? this.nightly.toy : this.toy
-    this.kara.reset(HOMESTEAD.x - 175, HOMESTEAD.y + 48, toy)
+    // §3.4: bond buys the quality of the dog, and it applies from the first spawn.
+    this.kara.reset(HOMESTEAD.x - 175, HOMESTEAD.y + 48, toy, tierOf(this.progress.bond))
 
     this.homesteadHp = HOMESTEAD_MAX_HP
-    this.oil = this.night.startingOil
+    // §9: every drum of oil bought with stash is a permanent +25, every night.
+    this.oil = this.night.startingOil + this.progress.oilUpgrades * 25
+    this.fedTonight = false
     this.lighting.fogDensity = this.night.fog
     this.gustTimer = this.night.wind
 
@@ -1081,6 +1160,14 @@ export class Game {
     // Crickets thin as the nights get worse, and the bed comes back up after last night's
     // bark took it down.
     this.audio.setNight(this.night.n || 1, this.night.fog)
+
+    // §3.4: bond earned in a night that was not held is discarded. Stash is not.
+    this.pendingBond = 0
+    this.karaUnhurt = true
+    this.killsToward = 0
+    this.stashOwed = 0
+    this.ballDue = false
+    this.ballWave = Math.floor(Math.random() * this.night.waves.length)
     // Straight back to the briefing: every night after the first introduces something,
     // and dropping the player into it unread is how a system gets blamed on the game.
     this.phase = 'briefing'
@@ -1133,6 +1220,45 @@ export class Game {
     } catch {
       this.nightIndex = 0
     }
+  }
+
+  /**
+   * §3.4. The night was held, so the escrow pays out — plus the two things that can only
+   * be judged at the end of it: resting her, and whether she got through it untouched.
+   */
+  private commitBond() {
+    const earned = this.pendingBond + BOND.rest + (this.karaUnhurt ? BOND.unhurt : 0)
+    this.pendingBond = 0
+    this.progress.bond = Math.max(0, Math.min(100, this.progress.bond + earned))
+    saveProgress(this.progress)
+  }
+
+  /** §9. Spend stash between nights. Only from a briefing. */
+  buy(id: string) {
+    if (this.phase !== 'briefing') return
+    const item = SHOP.find((s) => s.id === id)
+    if (!item || this.progress.stash < item.cost) return
+
+    if (item.id === 'feed') {
+      if (this.fedTonight) return
+      this.fedTonight = true
+      this.progress.bond = Math.min(100, this.progress.bond + BOND.feed)
+    } else if (item.id === 'oil') {
+      if (this.progress.oilUpgrades >= MAX_OIL_UPGRADES) return
+      this.progress.oilUpgrades += 1
+    } else if (item.id.startsWith('toy:')) {
+      const toy = item.id.slice(4) as ToyId
+      if (this.progress.toys.includes(toy)) return
+      this.progress.toys.push(toy)
+    }
+
+    this.progress.stash -= item.cost
+    saveProgress(this.progress)
+  }
+
+  /** §9. Turning fetching off costs progression and buys presence. */
+  toggleFetching() {
+    this.fetching = !this.fetching
   }
 
   /** Wipes progress and starts over at the First Night. */
@@ -1258,6 +1384,13 @@ export class Game {
         this.oil += OIL_PER_LIT_KILL
         this.sparks.wisp(enemy.x, enemy.y)
         this.corpses.push(new Corpse(enemy.gfx))
+        // §9: one item per three kills. It is *owed* here, not banked — she still has to
+        // go out into the dark and drag it back, and that trip is the price.
+        this.killsToward += 1
+        if (this.killsToward >= KILLS_PER_FETCH) {
+          this.killsToward = 0
+          this.stashOwed += 1
+        }
       }
     }
     this.enemies = survivors
@@ -1288,6 +1421,7 @@ export class Game {
         this.phase = 'complete'
         if (this.mode === 'nightly') recordHeld(this.nightly.key)
         if (this.mode === 'longroad') saveBest(this.runNight)
+        this.commitBond()
       } else {
         this.breakTimer = WAVE_BREAK
         this.phase = 'break'
@@ -1321,6 +1455,7 @@ export class Game {
     }
 
     this.kara.update(dt, this.lighting, threats)
+    this.tickProgression(dt)
 
     // Her belly light rides the animation envelope, so the flash is exactly as long as
     // the pose that earns it.
@@ -1341,6 +1476,66 @@ export class Game {
     this.audio.update(dt, { x: this.kara.x, y: this.kara.y, moving: this.kara.moving }, WORLD_WIDTH)
     this.renderPasses(dt)
     this.publish()
+  }
+
+  /**
+   * §3.4 / §3.5 / §9. The ledger, and the two things that feed it.
+   *
+   * Both verbs cost the same currency and it is not oil — it is **her being somewhere
+   * else.** That is the whole design of this layer: progression is bought with presence,
+   * and the player who wants both has to decide when they can spare her.
+   */
+  private tickProgression(dt: number) {
+    // ── The dropped ball (§3.5) ──────────────────────────────────────────────
+    // "Weighted to be inconvenient, i.e. 2–4s after a wave begins. Do not make the
+    // timing fair." So it lands while the wave is arriving, not in the quiet before it.
+    if (this.ballDue && this.phase === 'wave' && this.elapsed >= this.ballAt) {
+      this.ballDue = false
+      this.kara.dropBall()
+    }
+
+    if (this.kara.ignoredBall) {
+      this.kara.ignoredBall = false
+      this.pendingBond += BOND.ignoreBall
+    }
+
+    // §3.4. "Finish a night with her uninjured" is checked continuously rather than at the
+    // end, because she heals between waves — a scratch on wave 1 would otherwise be gone
+    // by the time anyone looked.
+    if (this.karaUnhurt && this.kara.hp < this.kara.loadout.maxHp) this.karaUnhurt = false
+
+    if (this.kara.wentDown) {
+      this.kara.wentDown = false
+      this.pendingBond += BOND.down
+    }
+
+    // ── Errands finishing ────────────────────────────────────────────────────
+    const done = this.kara.finishedErrand
+    if (done) {
+      this.kara.finishedErrand = null
+      if (done === 'ball') {
+        this.pendingBond += BOND.throwBall
+      } else if (this.stashOwed > 0) {
+        // She only banks what she actually carried back.
+        this.stashOwed -= 1
+        this.progress.stash += 1
+        saveProgress(this.progress)
+      }
+    }
+
+    // ── Fetching (§9) ────────────────────────────────────────────────────────
+    // She goes when there is something owed, she is free, and the player has left
+    // fetching on. Turning it off costs progression and buys presence.
+    if (this.fetching && this.stashOwed > 0 && !this.kara.busy && !this.kara.waitingOnBall) {
+      const angle = Math.random() * Math.PI * 2
+      // Far enough that the round trip is roughly the doc's six seconds at walk speed.
+      const reach = FETCH_SECONDS * 0.5 * this.kara.loadout.walkSpeed
+      const x = Math.max(60, Math.min(WORLD_WIDTH - 60, this.kara.x + Math.cos(angle) * reach))
+      const y = Math.max(120, Math.min(WORLD_HEIGHT - 40, this.kara.y + Math.sin(angle) * reach))
+      this.kara.sendToFetch(x, y)
+    }
+
+    void dt
   }
 
   /**
@@ -1414,6 +1609,27 @@ export class Game {
       karaHp: Math.ceil(this.kara.hp),
       karaMaxHp: this.kara.loadout.maxHp,
       toy: this.toy,
+      ownedToys: this.progress.toys,
+      bond: this.progress.bond,
+      bondTier: tierOf(this.progress.bond),
+      pendingBond: this.pendingBond,
+      stash: this.progress.stash,
+      stashOwed: this.stashOwed,
+      fetching: this.fetching,
+      ballOut: this.kara.waitingOnBall,
+      ballSecondsLeft: this.kara.ballSecondsLeft,
+      errand: this.kara.errandKind,
+      shop: SHOP.map((s) => {
+        const owned =
+          (s.id === 'feed' && this.fedTonight) ||
+          (s.id === 'oil' && this.progress.oilUpgrades >= MAX_OIL_UPGRADES) ||
+          (s.id.startsWith('toy:') && this.progress.toys.includes(s.id.slice(4) as ToyId))
+        return {
+          ...s,
+          owned,
+          affordable: !owned && this.progress.stash >= s.cost,
+        }
+      }),
       hasHold: this.kara.loadout.hold,
       holdReady: this.kara.holdReady || this.kara.holding,
       holdCooldown: this.kara.holdCooldownRemaining,

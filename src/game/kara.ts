@@ -1,5 +1,5 @@
 import { Container, Graphics } from 'pixi.js'
-import { BLANKET, BUBBLES, EAR_PERK_RADIUS, HOLD, KARA, KARA_WALK_SPEED, SHOW_BELLY } from './balance'
+import { BLANKET, BUBBLES, HOLD, KARA, KARA_WALK_SPEED, SHOW_BELLY } from './balance'
 import type { LightingSystem } from './lighting'
 import { loadoutFor } from './toys'
 import type { Loadout, ToyId } from './toys'
@@ -98,7 +98,10 @@ const ease = (t: number) => t * t * (3 - 2 * t)
  * at 0 HP she limps home and is unavailable, and the player is blind for that stretch.
  * That is the entire cost, and it is enough.
  */
-export type KaraMode = 'free' | 'belly' | 'blanket' | 'coax' | 'down' | 'hold'
+export type KaraMode = 'free' | 'belly' | 'blanket' | 'coax' | 'down' | 'hold' | 'errand'
+
+/** Why she is away from where you put her. */
+export type Errand = 'ball' | 'fetch'
 
 /**
  * The quilt off the porch rail. Drawn under the darkness overlay on purpose: a dog
@@ -486,6 +489,18 @@ export class Kara {
   private holdCooldown = 0
   /** Set each frame by update(); read by the audio layer for her tags. */
   private walking = false
+
+  /**
+   * One-shot flags the Game drains each frame. They exist because the bond and stash
+   * ledgers belong to the Game, not to her — she does the thing, it does the accounting.
+   */
+  ignoredBall = false
+  finishedErrand: Errand | null = null
+  /** §3.4: −5 bond. Raised once, the frame she goes Down. */
+  wentDown = false
+
+  /** Last frame's delta, so pose() can ease things without threading dt through. */
+  private dt = 1 / 60
   /** Seconds of Blanket Scrap speed left after she comes out. */
   private boost = 0
   /** 0 in the open, 1 completely hidden. Drives the quilt and hides the rigs. */
@@ -529,9 +544,22 @@ export class Kara {
       this.halo.ellipse(0, -3, r, r * 0.42).fill({ color: 0xffe6bd, alpha: a })
     }
 
+    // §3.5. A scuffed tennis ball at her feet. In the markings layer so it survives the
+    // dark — the whole point of the moment is that you cannot miss it.
+    this.ballGfx
+      .ellipse(0, 1, 6, 2.5)
+      .fill({ color: 0x000000, alpha: 0.3 })
+      .circle(0, -4, 5)
+      .fill(0xc9d94f)
+      .moveTo(-4.4, -6)
+      .quadraticCurveTo(0, -3.4, 4.4, -6)
+      .stroke({ width: 1, color: 0xf2f6d8, alpha: 0.8 })
+    this.ballGfx.position.set(-20, 0)
+    this.ballGfx.alpha = 0
+
     this.body.addChild(this.coatRig.root, this.quilt)
     // Halo first, so she stands on it rather than inside it.
-    this.markings.addChild(this.halo, this.markRig.root, this.pawOut)
+    this.markings.addChild(this.halo, this.markRig.root, this.pawOut, this.ballGfx)
   }
 
   /**
@@ -590,6 +618,68 @@ export class Kara {
     return this.mode === 'hold'
   }
 
+  /**
+   * §3.5 / §9. She is off doing something that is not defending the homestead.
+   *
+   * The round trip is emergent from the distance rather than a timer, which is the honest
+   * version: a ball thrown further costs more, and the cost is visible as her crossing the
+   * yard rather than as a number counting down.
+   */
+  private errand: { kind: Errand; to: { x: number; y: number }; home: { x: number; y: number }; back: boolean } | null =
+    null
+
+  get errandKind(): Errand | null {
+    return this.errand?.kind ?? null
+  }
+
+  /** §3.5. A ball is on the ground and she is looking at you. */
+  ballOut = false
+  private ballTimer = 0
+  private ballGfx = new Graphics()
+
+  /** True while she has dropped one and is waiting. The player has 6 seconds. */
+  get waitingOnBall() {
+    return this.ballOut
+  }
+
+  get ballSecondsLeft() {
+    return Math.max(0, this.ballTimer)
+  }
+
+  /**
+   * §3.5. Weighted to be *inconvenient* — the doc is explicit that the timing must not be
+   * fair. The Game picks the moment; she only has to stop and stare.
+   */
+  dropBall() {
+    if (this.mode !== 'free' || this.ballOut) return
+    this.ballOut = true
+    this.ballTimer = 6
+    this.target = null
+  }
+
+  /** Throw it. Returns false if there is nothing to throw. */
+  throwBall(x: number, y: number): boolean {
+    if (!this.ballOut) return false
+    this.ballOut = false
+    this.ballTimer = 0
+    this.beginErrand('ball', x, y)
+    return true
+  }
+
+  /** §9. She drags something back out of the dark. Six seconds of not being here. */
+  sendToFetch(x: number, y: number) {
+    if (this.mode !== 'free') return false
+    this.beginErrand('fetch', x, y)
+    return true
+  }
+
+  private beginErrand(kind: Errand, x: number, y: number) {
+    this.errand = { kind, to: { x, y }, home: { x: this.x, y: this.y }, back: false }
+    this.mode = 'errand'
+    this.target = { x, y }
+    this.speed = kind === 'ball' ? BUBBLES.chaseSpeed : this.loadout.walkSpeed
+  }
+
   /** §10: her tags only ring when she is on the move. A still dog is a silent dog. */
   get moving() {
     return this.walking
@@ -634,7 +724,10 @@ export class Kara {
     // §3.1 Down. She limps to the porch and lies there. She is not lost.
     this.hp = 0
     this.mode = 'down'
-    this.downTimer = KARA.downDuration
+    this.wentDown = true
+    this.errand = null
+    this.ballOut = false
+    this.downTimer = this.loadout.downDuration
     this.roll = 0
     this.bellyGlow = 0
     // Two dogs can put her Down inside the 2.2s roll. If the envelope were left running
@@ -656,8 +749,8 @@ export class Kara {
    * the last one, and the night's toy is applied here because it is chosen on the
    * briefing screen and must be in force before the first spawn.
    */
-  reset(x: number, y: number, toy: ToyId) {
-    this.loadout = loadoutFor(toy)
+  reset(x: number, y: number, toy: ToyId, bondTier = 0) {
+    this.loadout = loadoutFor(toy, bondTier)
 
     this.x = x
     this.y = y
@@ -673,6 +766,12 @@ export class Kara {
     this.holdTimer = 0
     this.holdCooldown = 0
     this.boost = 0
+    this.errand = null
+    this.ballOut = false
+    this.ballTimer = 0
+    this.ignoredBall = false
+    this.finishedErrand = null
+    this.wentDown = false
     this.under = 0
     this.downTimer = 0
     this.underTimer = 0
@@ -698,12 +797,13 @@ export class Kara {
     if (!this.bellyReady) return false
     this.mode = 'belly'
     this.bellyTimer = SHOW_BELLY.flash + SHOW_BELLY.recovery
-    this.bellyCooldown = SHOW_BELLY.cooldown
+    this.bellyCooldown = this.loadout.bellyCooldown
     this.target = null
     return true
   }
 
   update(dt: number, lighting: LightingSystem, threats: Threat[] = []) {
+    this.dt = dt
     let moving = false
 
     this.bellyCooldown = Math.max(0, this.bellyCooldown - dt)
@@ -770,6 +870,32 @@ export class Kara {
     this.holdCooldown = Math.max(0, this.holdCooldown - dt)
     this.boost = Math.max(0, this.boost - dt)
 
+    // ── The dropped ball (§3.5) ──────────────────────────────────────────────
+    // She waits six seconds and then picks it back up, disappointed. The Game charges
+    // the bond either way; all she does is stand there and look at you.
+    if (this.ballOut) {
+      this.ballTimer -= dt
+      if (this.ballTimer <= 0) {
+        this.ballOut = false
+        this.ignoredBall = true
+      }
+    }
+
+    // ── Errands (§3.5 fetching the ball, §9 fetching the stash) ──────────────
+    // Out to the point, then straight back to where she was standing. The whole cost is
+    // the crossing, and the player watches her do it.
+    if (this.mode === 'errand' && this.errand && !this.target) {
+      if (!this.errand.back) {
+        this.errand.back = true
+        this.target = { ...this.errand.home }
+        this.speed = this.loadout.walkSpeed
+      } else {
+        this.finishedErrand = this.errand.kind
+        this.errand = null
+        this.mode = 'free'
+      }
+    }
+
     // ── Hold (§3.2, Rope toy) ────────────────────────────────────────────────
     // She does not move and does not take orders, but she is still listening — planted
     // is not the same as absent, and her ears are the one thing this never costs.
@@ -834,7 +960,7 @@ export class Kara {
 
     for (const t of threats) {
       const d = Math.hypot(t.x - this.x, t.y - this.y)
-      if (d > EAR_PERK_RADIUS || d >= nearest) continue
+      if (d > this.loadout.earRadius || d >= nearest) continue
       if (t.visible || !t.soonVisible) continue
       nearest = d
       listening = t
@@ -918,6 +1044,14 @@ export class Kara {
     // hidden, and a glow that survived it would give away the one thing it buys.
     this.halo.alpha = (1 - this.under) * (this.mode === 'down' ? 0.45 : 1)
     this.halo.scale.set(1 + Math.sin(this.breath * 0.8) * 0.04)
+
+    // The ball sits on the ground in front of her and rocks slightly, because she is
+    // nosing at it. It fades rather than blinking out when the moment passes.
+    this.ballGfx.alpha += ((this.ballOut ? 1 : 0) - this.ballGfx.alpha) * Math.min(1, this.dt * 6)
+    if (this.ballGfx.alpha > 0.01) {
+      this.ballGfx.position.x = -20 * this.facing
+      this.ballGfx.rotation = Math.sin(this.breath * 3.1) * 0.25 * this.ballGfx.alpha
+    }
 
     const lit = lighting.lightAt(this.x, this.y)
     // Floor raised 0.28 → 0.42 (fix-plan F3): she is the stated exception to the dark and

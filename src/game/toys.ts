@@ -18,7 +18,7 @@
  * from the start. The per-night choice is the part that matters and it works today.
  */
 
-import { BLANKET, BUBBLES, KARA, KARA_WALK_SPEED } from './balance'
+import { BLANKET, BUBBLES, EAR_PERK_RADIUS, KARA, KARA_WALK_SPEED, SHOW_BELLY } from './balance'
 
 export type ToyId = 'rope' | 'bear' | 'monkey' | 'scrap'
 
@@ -64,7 +64,10 @@ export const TOYS: Toy[] = [
   },
 ]
 
-/** Everything a toy can change about Kara, resolved once at the start of a night. */
+/**
+ * Everything a toy **or bond tier** can change about Kara, resolved once at the start of a
+ * night so nothing downstream has to ask which toy is equipped or how well she is loved.
+ */
 export interface Loadout {
   toy: ToyId
   maxHp: number
@@ -76,9 +79,22 @@ export interface Loadout {
   emergeBoost: number
   emergeSpeed: number
   hold: boolean
+  /** §3.4 T1. */
+  earRadius: number
+  /** §3.4 T2. */
+  bellyCooldown: number
+  /** §3.4 T3. */
+  downDuration: number
 }
 
-export function loadoutFor(toy: ToyId): Loadout {
+/**
+ * Resolve a night's toy and bond tier into plain numbers.
+ *
+ * Bond is applied **after** the toy, so the Blanket Scrap's flat 1.0s coax is not then
+ * reduced further by tier — a toy that already gives you the floor should not be made
+ * better by something unrelated.
+ */
+export function loadoutFor(toy: ToyId, bondTier = 0): Loadout {
   const base: Loadout = {
     toy,
     maxHp: KARA.hp,
@@ -89,10 +105,25 @@ export function loadoutFor(toy: ToyId): Loadout {
     emergeBoost: 0,
     emergeSpeed: 1,
     hold: false,
+    earRadius: EAR_PERK_RADIUS,
+    bellyCooldown: SHOW_BELLY.cooldown,
+    downDuration: KARA.downDuration,
   }
 
-  if (toy === 'rope') return { ...base, hold: true }
-  if (toy === 'bear') return { ...base, maxHp: 150, walkSpeed: KARA_WALK_SPEED * 0.85 }
-  if (toy === 'monkey') return { ...base, bubbleCharges: 4, bubbleRegen: 5 }
-  return { ...base, blanketCoax: 1.0, emergeBoost: 3, emergeSpeed: 1.5 }
+  let out: Loadout
+  if (toy === 'rope') out = { ...base, hold: true }
+  else if (toy === 'bear') out = { ...base, maxHp: 150, walkSpeed: KARA_WALK_SPEED * 0.85 }
+  else if (toy === 'monkey') out = { ...base, bubbleCharges: 4, bubbleRegen: 5 }
+  else out = { ...base, blanketCoax: 1.0, emergeBoost: 3, emergeSpeed: 1.5 }
+
+  // §3.4. Each tier is a thing about her, not a thing about your defenses.
+  if (bondTier >= 1) out.earRadius = 350
+  if (bondTier >= 2) {
+    out.bellyCooldown = 11
+    // §3.2: 3.0 − 0.4 × tier, floor 1.0. Never worsens a toy that already beat it.
+    out.blanketCoax = Math.min(out.blanketCoax, Math.max(1.0, BLANKET.coax - 0.4 * bondTier))
+  }
+  if (bondTier >= 3) out.downDuration = 12
+
+  return out
 }

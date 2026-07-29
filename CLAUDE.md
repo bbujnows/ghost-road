@@ -26,12 +26,16 @@ order — pick by what the game needs. In rough order of what it is missing most
 1. ~~The bark~~ — **built 2026-07-29** (§10.1), with the bed and her collar tags around it. All
    synthesised; no assets. **Enemies stay silent and must remain so** — the bark is the loud noise,
    and a player straining to hear is the whole point.
-2. **Bond and the ball stash** (§3.4, §3.5, §9) — the between-night layer. The draft, four toys, and
-   the Nightly Road's unlock economy all wait on stash.
-3. **Hard mode's scars** (§7.2). Without them a Long Road run ends on the first loss.
-4. **The remaining wards** — salt, bell, spring line, bottle tree, fiddler. The Bottle Tree also
-   makes the Tallow Man's light resist live for the first time.
-5. **The blocked bosses** — Snallygaster (aerial pathing), Drownd Girl (salt + water + light damage),
+2. ~~Bond and the ball stash~~ — **built 2026-07-29** (§3.4a). Bond is escrowed for the length of a
+   night and only committed when the night is held; stash banks immediately and survives a retry.
+   That asymmetry is the consult's §6 anti-exploit and must not be flattened.
+3. **The remaining wards** — salt, bell, spring line, bottle tree, fiddler. Now the highest-value
+   item: two wards is still not a roster, and the stash shop has nothing to sell without them
+   (measured: 94 stash banked against a 72-cost shop). The Bottle Tree also makes the Tallow Man's
+   light resist live for the first time.
+4. **Hard mode's scars** (§7.2). Without them a Long Road run ends on the first loss.
+5. **Lead** (bond T4) and the hose (§3.3) — the last two of Kara's specified abilities.
+6. **The blocked bosses** — Snallygaster (aerial pathing), Drownd Girl (salt + water + light damage),
    the Fetch. Each is one system away.
 
 **Four toys are blocked, not cut** — Ragged Fox needs bond, Tennis Ball needs the ball drop and
@@ -113,6 +117,7 @@ src/game/
   roadgen.ts    procedural roads, propose-and-check against real constraints
   toys.ts       the toy roster, and Loadout — every Kara stat a toy can change
   audio.ts      the ambient bed, her collar tags, and the bark — all synthesised
+  progression.ts bond, stash, the tier table, and the between-night shop
   enemies.ts    Enemy and Boss base classes + the whole roster + Corpse
   wards.ts      Lantern (pure light, snuffable) and ColdIron (damage, only in light)
   kara.ts       her dual rig, her state machine, and every ability she has
