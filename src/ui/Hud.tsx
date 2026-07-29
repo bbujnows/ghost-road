@@ -282,6 +282,7 @@ export interface HudProps {
   onRestartCampaign: () => void
   onChooseToy: (id: ToyId) => void
   onSetMode: (mode: GameState['mode']) => void
+  onToggleAudio: () => void
 }
 
 /**
@@ -398,6 +399,7 @@ export function Hud({
   onRestartCampaign,
   onChooseToy,
   onSetMode,
+  onToggleAudio,
 }: HudProps) {
   if (!state) return null
 
@@ -460,6 +462,16 @@ export function Hud({
         </div>
 
         <div className="top-buttons">
+          {/* §11: silent by default. It is a game played at a desk, so sound is opt-in —
+              and the bark is worth opting in for exactly once. */}
+          <button
+            type="button"
+            className={`speed-btn ${state.audioOn ? 'active' : ''}`}
+            onClick={onToggleAudio}
+            title={state.audioOn ? 'Sound on' : 'Sound off — she is worth hearing'}
+          >
+            {state.audioOn ? '♪' : '♪̸'}
+          </button>
           <button
             type="button"
             className={`speed-btn ${state.speed > 1 ? 'active' : ''}`}

@@ -858,6 +858,32 @@ arrives.
 She does not bark at anything else. Not at bosses, not at the Fetch, not at the Drover. Seven
 nights of a silent dog is what buys those four hundred milliseconds.
 
+### 10.1 As built (2026-07-29)
+
+`src/game/audio.ts`. **Everything is synthesised** — no asset pipeline, no network fetch, and a
+strict CSP would block the latter even if the former existed. Off until the player asks for it (§11),
+via the `♪` button; browsers require a gesture regardless.
+
+| Element | How |
+| --- | --- |
+| Wind in the ridge pines | Brown noise through a lowpass, cutoff driven by two detuned LFOs at 0.06 and 0.017 Hz so the gusting never finds a rhythm the ear can predict |
+| The creek | Highpassed noise at 2.6 kHz, steady and almost subliminal |
+| Crickets | Three-pulse triangle chirps, panned randomly. **Density `1 − 0.14(n−1) − 0.35 × fog`** — they thin as the nights get worse, which is the one place the bed carries information |
+| Her collar tags | Three inharmonic partials (5.2k / 7.1k / 3.9k), panned to her x, attenuated to nothing by 900px. **Only while she is moving** — a still dog is a silent dog, and stillness already means something here |
+| Paws on gravel | Bandpassed noise burst at 1.4 kHz, quiet; it exists so the tags have something to sit on |
+| **The bark** | Sawtooth + square glottal pulse, 430 → 190 Hz over 130ms, through formants at 900 Hz and 2050 Hz, with a highpassed noise transient on the front — which is most of what makes a bark read as a bark |
+
+The four steps are implemented exactly as specified: bed and dog channels cut to −60 dB over 12ms
+(fast enough to read as a cut, not a fade), 400ms of nothing, the bark at −3 dBFS, a 4.2 kHz
+band ringing out over 2.1s, then ambient back at half and staying there.
+
+**Enemies remain silent, deliberately.** No footsteps, no cloth, no spawn cues. §10 is right that a
+player straining to hear is a player who will be destroyed by a loud noise, and the bark is the loud
+noise. Adding enemy audio later must not undo that.
+
+**The silence is the trick, not the bark.** If any of this gets tuned, the 400ms is the last thing
+that should move.
+
 ---
 
 ## 11. Session and technical constraints

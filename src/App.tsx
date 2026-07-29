@@ -41,6 +41,7 @@ export default function App() {
   const restartCampaign = useCallback(() => gameRef.current?.restartCampaign(), [])
   const chooseToy = useCallback((id: ToyId) => gameRef.current?.chooseToy(id), [])
   const setMode = useCallback((m: Mode) => gameRef.current?.setMode(m), [])
+  const toggleAudio = useCallback(() => void gameRef.current?.toggleAudio(), [])
 
   return (
     <div className="app">
@@ -58,6 +59,7 @@ export default function App() {
           onRestartCampaign={restartCampaign}
           onChooseToy={chooseToy}
           onSetMode={setMode}
+          onToggleAudio={toggleAudio}
         />
       </div>
     </div>

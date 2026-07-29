@@ -484,6 +484,8 @@ export class Kara {
   private coaxTimer = 0
   private holdTimer = 0
   private holdCooldown = 0
+  /** Set each frame by update(); read by the audio layer for her tags. */
+  private walking = false
   /** Seconds of Blanket Scrap speed left after she comes out. */
   private boost = 0
   /** 0 in the open, 1 completely hidden. Drives the quilt and hides the rigs. */
@@ -586,6 +588,11 @@ export class Kara {
   /** True while she is planted. The Game reads this to stop things getting past her. */
   get holding() {
     return this.mode === 'hold'
+  }
+
+  /** §10: her tags only ring when she is on the move. A still dog is a silent dog. */
+  get moving() {
+    return this.walking
   }
 
   /**
@@ -864,6 +871,7 @@ export class Kara {
   }
 
   private pose(moving: boolean, lighting: LightingSystem) {
+    this.walking = moving
     const pose: Pose = {
       facing: this.facing,
       walk: this.walk,

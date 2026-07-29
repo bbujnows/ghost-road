@@ -593,6 +593,12 @@ export const KARA_WALK_SPEED = 95
  * The light is strong enough to push Dim ground into Lit on its own (0.9 + 0.08 ambient
  * clears the 0.35 threshold out to ~230px), which makes this the player's manual answer
  * to a clump the lanterns cannot reach. She is wide open for the whole 2.2s.
+ *
+ * **Observed in play 2026-07-29: this is the answer to a gust.** Shown a wind band about
+ * to cross, the player moved her into it and rolled — 222px of Lit ground is larger than
+ * a lantern's whole pool, so she substitutes for the lanterns the squall is about to take.
+ * Nobody designed that. It is the strongest line of play the game has, and any future
+ * tuning of Show Belly or of GUST has to keep it working.
  */
 export const SHOW_BELLY = {
   cooldown: 14,

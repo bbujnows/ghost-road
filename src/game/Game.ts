@@ -30,6 +30,7 @@ import type { NightlyNight } from './nightly'
 import { BRANCHES, BRANCHES_FOR } from './balance'
 import type { BranchId, EnemyKind, WardKind } from './balance'
 import { Bloom, Motes, Sparks, Weather, vignette } from './atmosphere'
+import { Audio } from './audio'
 import { Bubble } from './bubbles'
 import { Boss, Corpse, setEnemyScale, spawn } from './enemies'
 import type { Enemy, EnemyContext } from './enemies'
@@ -136,6 +137,8 @@ export interface GameState {
   helpOpen: boolean
   /** 1 or FAST_FORWARD. */
   speed: number
+  /** §11: silent by default. This is off until the player asks for it. */
+  audioOn: boolean
   bellyReady: boolean
   /** Seconds until Show Belly is available; 0 when ready. */
   bellyCooldown: number
@@ -209,6 +212,9 @@ export class Game {
   private bloom!: Bloom
   private motes!: Motes
   private weather!: Weather
+  private audio = new Audio()
+  /** §10: once per night, maximum. This is the whole rate limit. */
+  private barked = false
   private enemies: Enemy[] = []
   private corpses: Corpse[] = []
   private lanterns: Lantern[] = []
@@ -463,6 +469,16 @@ export class Game {
       () => window.removeEventListener('keydown', onKey),
       () => window.removeEventListener('blur', onBlur),
     )
+  }
+
+  /** Audio is off until asked for (§11), and browsers want a gesture regardless. */
+  async toggleAudio() {
+    if (this.audio.enabled) this.audio.disable()
+    else await this.audio.enable()
+  }
+
+  get audioOn() {
+    return this.audio.enabled
   }
 
   /** Leaves the briefing and starts the first wave countdown. */
@@ -1061,6 +1077,10 @@ export class Game {
     this.waveIndex = 0
     this.spawnQueue = []
     this.breakTimer = 4
+    this.barked = false
+    // Crickets thin as the nights get worse, and the bed comes back up after last night's
+    // bark took it down.
+    this.audio.setNight(this.night.n || 1, this.night.fog)
     // Straight back to the briefing: every night after the first introduces something,
     // and dropping the player into it unread is how a system gets blamed on the game.
     this.phase = 'briefing'
@@ -1208,6 +1228,12 @@ export class Game {
       if (enemy.arrived) {
         this.homesteadHp -= enemy.porchDamage
         enemy.hp = 0
+        // §10. She has been silent all night and all campaign. Something is on the porch,
+        // so it is no longer a warning — it is a verdict, and it fires exactly once.
+        if (!this.barked) {
+          this.barked = true
+          this.audio.bark()
+        }
       }
     }
 
@@ -1311,6 +1337,8 @@ export class Game {
     this.bubbles = this.bubbles.filter((b) => !b.popped)
 
     this.smoke.update(dt)
+    // Her tags are how you hear where she is when she is off in the dark (§10).
+    this.audio.update(dt, { x: this.kara.x, y: this.kara.y, moving: this.kara.moving }, WORLD_WIDTH)
     this.renderPasses(dt)
     this.publish()
   }
@@ -1378,6 +1406,7 @@ export class Game {
       paused: this.paused,
       helpOpen: this.helpOpen,
       speed: this.speed,
+      audioOn: this.audio.enabled,
       bellyReady: this.kara.bellyReady,
       bellyCooldown: this.kara.bellyCooldownRemaining,
       bubbleCharges: this.kara.bubbleCharges,
@@ -1416,6 +1445,7 @@ export class Game {
     // Still initializing — mount() sees `disposed` when it resumes and cleans up there.
     if (!this.ready) return
 
+    this.audio.destroy()
     this.bloom.destroy()
     this.lighting.destroy()
     this.app.destroy(true, { children: true })

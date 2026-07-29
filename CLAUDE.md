@@ -23,8 +23,9 @@ the Long Road (endless from night 8, with a road generated per run — unlocked 
 **The roadmap is done.** What remains is the deferred pile, and it is no longer ordered by a build
 order — pick by what the game needs. In rough order of what it is missing most:
 
-1. **The bark** (§10). It is the emotional payload of the whole design and the reason the audio mix
-   exists, and it is still unbuilt. Everything else in audio waits on it.
+1. ~~The bark~~ — **built 2026-07-29** (§10.1), with the bed and her collar tags around it. All
+   synthesised; no assets. **Enemies stay silent and must remain so** — the bark is the loud noise,
+   and a player straining to hear is the whole point.
 2. **Bond and the ball stash** (§3.4, §3.5, §9) — the between-night layer. The draft, four toys, and
    the Nightly Road's unlock economy all wait on stash.
 3. **Hard mode's scars** (§7.2). Without them a Long Road run ends on the first loss.
@@ -111,6 +112,7 @@ src/game/
   longroad.ts   endless escalation (doc §8 formulas) and the high-water mark
   roadgen.ts    procedural roads, propose-and-check against real constraints
   toys.ts       the toy roster, and Loadout — every Kara stat a toy can change
+  audio.ts      the ambient bed, her collar tags, and the bark — all synthesised
   enemies.ts    Enemy and Boss base classes + the whole roster + Corpse
   wards.ts      Lantern (pure light, snuffable) and ColdIron (damage, only in light)
   kara.ts       her dual rig, her state machine, and every ability she has

@@ -238,8 +238,12 @@ be started until someone has played the result of 1–7 with sound on.
 
 ## 5. The five questions only a played session answers
 
-1. **Does a gust now produce an action?** Watch whether the player moves Kara or places a ward during
-   the 1.8s warning. If they still do nothing, F1 failed and wind should be cut entirely.
+1. ~~**Does a gust now produce an action?**~~ **ANSWERED 2026-07-29 — yes, and better than
+   specified.** The player moved Kara into the band during the warning *and* used Show Belly there.
+   That is the correct answer and it was not designed: Show Belly makes ground Lit out to 222px,
+   which is larger than a lantern's entire pool, so it is a genuine substitute for the lanterns the
+   gust is about to take. **Wind stays.** Record the combo — Show Belly as the answer to a gust is
+   now a real line of play and should survive any future tuning of either.
 2. **Is Kara watched?** Track how often the cursor or camera attention returns to her when nothing is
    attacking her. If the answer is "only when something is", the positioning is still aspirational.
 3. **Is Ear-Perk learned without being told?** Ask the player afterwards what her ears mean. If they
