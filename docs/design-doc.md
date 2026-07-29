@@ -897,6 +897,20 @@ compete for the same pool.
 | Heal Kara to full | 5 |
 | Rest her (bond +5) | Free |
 
+**As built (repriced 2026-07-29).** Feed her 4 · a drum of oil 10 (permanent +25 starting oil, up to
+four) · a better lamp 15 (every lantern +12px radius, permanently) · salt by the sack 18 (lines take
+3 more crossings) · the three unowned toys at 16/18/20. The lamp and the sack are the doc's own two
+upgrades, unbuildable until the wards they name shipped this week. **Healing her is cut** — a night
+starts her whole, so it would buy nothing. Resting her is free and automatic on holding a night.
+
+> Measured: **155 of total sinks against ~97 banked** across seven nights with fetching left on the
+> whole time — **63% affordable**, against §9's target of about half. And it gets there *through the
+> toggle rather than the price list*: every wave she spends defending instead of retrieving pushes
+> that number down. The scarcity is a decision, not a price.
+>
+> A permanent lantern upgrade rides **on top of** a branch tier's authored radius rather than being
+> replaced by it. A player who bought a better lamp must not lose it by upgrading the lamp.
+
 Buying everything would cost roughly **180**. The player can afford about half. That gap is the
 build.
 

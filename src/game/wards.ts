@@ -68,6 +68,8 @@ export class Lantern {
 
   readonly upgrades = new Upgradable()
   private stats: Omit<LanternTier, 'cost' | 'note'> = { ...LANTERN_BASE }
+  /** Kept so a branch tier's authored radius does not silently discard the purchase. */
+  private extraRadius = 0
 
   private housing = new Container()
   private flame = new Graphics()
@@ -80,15 +82,24 @@ export class Lantern {
   private burn = 1
   private smoke = new Graphics()
 
-  constructor(x: number, y: number, roadAngle: number, lighting: LightingSystem) {
+  constructor(
+    x: number,
+    y: number,
+    roadAngle: number,
+    lighting: LightingSystem,
+    /** §9: "A better lamp" adds to this permanently, before any branch applies. */
+    extraRadius = 0,
+  ) {
     this.x = x
     this.y = y
     this.roadAngle = roadAngle
+    this.stats.radius += extraRadius
+    this.extraRadius = extraRadius
 
     this.light = lighting.add({
       x,
       y,
-      radius: LANTERN.radius,
+      radius: this.stats.radius,
       color: LANTERN.color,
       intensity: LANTERN.intensity,
       flicker: LANTERN.flicker,
@@ -147,16 +158,19 @@ export class Lantern {
     const tier = this.upgrades.take(id) as LanternTier | null
     if (!tier) return 0
 
+    // The permanent purchase rides on top of the tier's authored radius rather than being
+    // replaced by it — a player who bought a better lamp should not lose it by upgrading.
+    const radius = tier.radius + this.extraRadius
     this.stats = {
-      radius: tier.radius,
+      radius,
       along: tier.along,
       across: tier.across,
       snuffScale: tier.snuffScale,
     }
 
-    this.light.radius = tier.radius * tier.along
+    this.light.radius = radius * tier.along
     // A circle stays a circle: leaving radiusY undefined keeps it on the cheaper path.
-    this.light.radiusY = tier.across === tier.along ? undefined : tier.radius * tier.across
+    this.light.radiusY = tier.across === tier.along ? undefined : radius * tier.across
 
     this.drawFittings()
     return tier.cost
@@ -265,10 +279,15 @@ export class SaltLine {
   private grains = new Graphics()
   private crossed = new Set<Enemy>()
 
-  constructor(x: number, y: number, roadAngle: number) {
+  /** §9: "Salt by the sack" raises this permanently. */
+  private readonly capacity: number
+
+  constructor(x: number, y: number, roadAngle: number, extraCrossings = 0) {
     this.x = x
     this.y = y
     this.angle = roadAngle + Math.PI / 2
+    this.capacity = SALT.crossings + extraCrossings
+    this.left = this.capacity
 
     this.draw()
     this.gfx.addChild(this.grains)
@@ -287,7 +306,7 @@ export class SaltLine {
   private draw() {
     const g = this.grains.clear()
     const L = SALT.length
-    const wear = this.left / SALT.crossings
+    const wear = this.left / this.capacity
 
     // A poured line, not a painted one: scattered grains, thinning as it is used up.
     for (let i = 0; i < 90; i++) {

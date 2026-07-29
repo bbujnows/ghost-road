@@ -45,10 +45,12 @@ import type { KaraMode, Threat } from './kara'
 import { TOYS, loadoutFor } from './toys'
 import type { ToyId } from './toys'
 import {
+  BETTER_LAMP_BONUS,
   BOND,
   FETCH_SECONDS,
   KILLS_PER_FETCH,
   MAX_OIL_UPGRADES,
+  SALT_SACK_BONUS,
   SHOP,
   loadProgress,
   saveProgress,
@@ -1067,7 +1069,13 @@ export class Game {
       // The road angle is baked in at placement so a later Mirror Back throws its oval
       // down the road rather than across it. A lantern that has to be re-aimed after
       // upgrading would be a puzzle about the UI, not about the road.
-      const lantern = new Lantern(x, y, this.roadAngleAt(x, y), this.lighting)
+      const lantern = new Lantern(
+        x,
+        y,
+        this.roadAngleAt(x, y),
+        this.lighting,
+        this.progress.betterLamp ? BETTER_LAMP_BONUS : 0,
+      )
       this.lanterns.push(lantern)
       this.actors.addChild(lantern.gfx)
       this.bloom.source.addChild(lantern.emissive)
@@ -1078,7 +1086,12 @@ export class Game {
     } else if (this.selectedWard === 'salt') {
       // Across the road, not along it — the ward auto-orients so the player never has to
       // think about it, the same way iron does.
-      const salt = new SaltLine(x, y, this.roadAngleAt(x, y))
+      const salt = new SaltLine(
+        x,
+        y,
+        this.roadAngleAt(x, y),
+        this.progress.saltSack ? SALT_SACK_BONUS : 0,
+      )
       this.salts.push(salt)
       this.actors.addChild(salt.gfx)
     } else if (this.selectedWard === 'bottle') {
@@ -1364,6 +1377,12 @@ export class Game {
     } else if (item.id === 'oil') {
       if (this.progress.oilUpgrades >= MAX_OIL_UPGRADES) return
       this.progress.oilUpgrades += 1
+    } else if (item.id === 'lamp') {
+      if (this.progress.betterLamp) return
+      this.progress.betterLamp = true
+    } else if (item.id === 'salt') {
+      if (this.progress.saltSack) return
+      this.progress.saltSack = true
     } else if (item.id.startsWith('toy:')) {
       const toy = item.id.slice(4) as ToyId
       if (this.progress.toys.includes(toy)) return
@@ -1756,6 +1775,8 @@ export class Game {
         const owned =
           (s.id === 'feed' && this.fedTonight) ||
           (s.id === 'oil' && this.progress.oilUpgrades >= MAX_OIL_UPGRADES) ||
+          (s.id === 'lamp' && this.progress.betterLamp) ||
+          (s.id === 'salt' && this.progress.saltSack) ||
           (s.id.startsWith('toy:') && this.progress.toys.includes(s.id.slice(4) as ToyId))
         return {
           ...s,

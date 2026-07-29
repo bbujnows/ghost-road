@@ -31,7 +31,8 @@ order — pick by what the game needs. In rough order of what it is missing most
    That asymmetry is the consult's §6 anti-exploit and must not be flattened.
 3. ~~The remaining wards~~ — **salt, the Bottle Tree and the Church Bell built 2026-07-29** (§5.3).
    The Spring Line needs detour pathfinding and the Fiddler should land last; both are blocked
-   rather than deferred. **Reprice the stash shop now that there is more to sell.**
+   rather than deferred. The stash shop was repriced with them (§9): 155 of sinks against ~97
+   banked, 63% affordable, and the gap closes or widens depending on how much you use her.
 4. **Hard mode's scars** (§7.2). Without them a Long Road run ends on the first loss.
 5. **Lead** (bond T4) and the hose (§3.3) — the last two of Kara's specified abilities.
 6. **The blocked bosses** — Snallygaster (aerial pathing), Drownd Girl (salt + water + light damage),

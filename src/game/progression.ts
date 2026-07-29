@@ -24,12 +24,27 @@ export interface Progress {
   toys: ToyId[]
   /** §9. Each purchase is a permanent +25 to every night's starting oil. */
   oilUpgrades: number
+  /** §9. Salt lines take 11 crossings instead of 8, for good. */
+  saltSack: boolean
+  /** §9. Every lantern you place is a little bigger, for good. */
+  betterLamp: boolean
 }
+
+/** §9 permanent upgrades, applied wherever the ward is constructed. */
+export const SALT_SACK_BONUS = 3
+export const BETTER_LAMP_BONUS = 12
 
 /** §4: one toy is free so the loadout screen is never empty. */
 export const STARTING_TOYS: ToyId[] = ['rope']
 
-const EMPTY: Progress = { bond: 0, stash: 0, toys: [...STARTING_TOYS], oilUpgrades: 0 }
+const EMPTY: Progress = {
+  bond: 0,
+  stash: 0,
+  toys: [...STARTING_TOYS],
+  oilUpgrades: 0,
+  saltSack: false,
+  betterLamp: false,
+}
 const KEY = 'ghost-road/progress-v2'
 
 // ─── §3.4 Bond tiers ────────────────────────────────────────────────────────
@@ -87,30 +102,50 @@ export interface StashItem {
  * permanent lantern upgrade both name wards that do not exist, and "heal Kara to full"
  * does nothing now that a night starts her whole.
  */
+/**
+ * §9 spending, repriced 2026-07-29 now that the roster is wide enough to hang purchases on.
+ *
+ * The two upgrades below are the doc's own, and they were unbuildable until this week —
+ * "permanent salt capacity" and "permanent lantern upgrade" both named wards that did not
+ * exist. `heal Kara to full` is still cut: a night starts her whole, so it would buy
+ * nothing.
+ *
+ * Measured: **155 of total sinks** (87 in permanent one-offs, 28 to feed her every night, 40
+ * in oil drums) against **~97 banked across seven nights with fetching left on the whole
+ * time** — so a player who never spares her affords **63%** of it. §9 budgets ~180 against
+ * ~90 and wants about half, so this lands where it was aimed.
+ *
+ * And it lands there **through the toggle rather than through the price list**, which is the
+ * better version: every wave she spends defending instead of retrieving pushes that 63%
+ * down. The scarcity is a decision, not a number.
+ */
 export const SHOP: StashItem[] = [
   { id: 'feed', name: 'Feed her', detail: `Bond +${BOND.feed}. Once a night.`, cost: 4 },
-  { id: 'oil', name: 'A drum of oil', detail: 'Permanent +25 starting oil, every night.', cost: 14 },
+  { id: 'oil', name: 'A drum of oil', detail: 'Permanent +25 starting oil, every night.', cost: 10 },
+  {
+    id: 'lamp',
+    name: 'A better lamp',
+    detail: `Every lantern you place, +${BETTER_LAMP_BONUS}px radius. Permanent.`,
+    cost: 15,
+  },
+  {
+    id: 'salt',
+    name: 'Salt by the sack',
+    detail: `Salt lines take ${SALT_SACK_BONUS} more crossings before they are gone. Permanent.`,
+    cost: 18,
+  },
   { id: 'toy:bear', name: 'The Weighted Bear', detail: 'Unlocks the toy.', cost: 16 },
   { id: 'toy:monkey', name: 'The Sock Monkey', detail: 'Unlocks the toy.', cost: 18 },
   { id: 'toy:scrap', name: 'The Old Blanket Scrap', detail: 'Unlocks the toy.', cost: 20 },
 ]
 
 /**
- * ⚠ **Measured: this shop is too small to create scarcity, and that is a content problem
- * rather than a pricing one.**
- *
- * §9 budgets a ~180-cost shop against ~90 earned, so the player affords about half and
- * the gap is the choice. Three of the doc's five sinks name wards that do not exist (salt
- * capacity, the permanent lantern upgrade) or do nothing now that a night starts her whole
- * (healing her), so what shipped totals 72 against a measured **94 banked over seven
- * nights with fetching on** — everything, with change.
- *
- * The oil drum is the only repeatable sink, so surplus flows there, and an uncapped
- * permanent +25/night would trivialise the economy it is supposed to serve. Hence the cap.
- * **Remove the cap and reprice when the remaining wards land**, which is when §9's real
- * spread returns.
+ * The oil drum is the only repeatable sink, so surplus flows there — and an uncapped
+ * permanent +25/night would trivialise the economy it is supposed to serve. Raised 3 → 4
+ * with the reprice, because there is now enough else to buy that the drum is competing
+ * rather than defaulting.
  */
-export const MAX_OIL_UPGRADES = 3
+export const MAX_OIL_UPGRADES = 4
 
 // ─── Persistence ────────────────────────────────────────────────────────────
 
@@ -124,6 +159,8 @@ export function loadProgress(): Progress {
       stash: clamp(p.stash, 0, 9999),
       toys: Array.isArray(p.toys) ? (p.toys as ToyId[]) : [...STARTING_TOYS],
       oilUpgrades: clamp(p.oilUpgrades, 0, 20),
+      saltSack: p.saltSack === true,
+      betterLamp: p.betterLamp === true,
     }
   } catch {
     return { ...EMPTY, toys: [...STARTING_TOYS] }
