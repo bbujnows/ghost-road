@@ -6,13 +6,17 @@ import {
   COLD_IRON,
   EAR_PERK_LEAD,
   FAST_FORWARD,
+  BOTTLE_TREE,
+  CHURCH_BELL,
   GUST,
   HOLD,
   HOMESTEAD_MAX_HP,
   KARA,
   LANTERN,
+  OIL_PER_DARK_KILL,
   OIL_PER_LIT_KILL,
   OIL_PER_WAVE,
+  SALT,
   SHOW_BELLY,
   WAVE_BREAK,
 } from './balance'
@@ -53,7 +57,7 @@ import {
 import type { Progress } from './progression'
 import { LightingSystem, bandOf, reachFraction } from './lighting'
 import type { Band, Light } from './lighting'
-import { ColdIron, Lantern } from './wards'
+import { BottleTree, ChurchBell, ColdIron, Lantern, SaltLine } from './wards'
 import { AUTHORED_ROAD, HOMESTEAD, ROAD, buildScene, setRoad } from './world'
 import type { Smoke, Vec2 } from './world'
 
@@ -69,6 +73,34 @@ function mulberry32(seed: number): () => number {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
+}
+
+/** The order they appear in the HUD, and therefore what keys 1–5 select. */
+export const WARD_ORDER: WardKind[] = ['lantern', 'iron', 'salt', 'bottle', 'bell']
+
+export const WARD_NAME: Record<WardKind, string> = {
+  lantern: 'Lantern Post',
+  iron: 'Cold Iron',
+  salt: 'Salt Line',
+  bottle: 'Bottle Tree',
+  bell: 'Church Bell',
+}
+
+/** One phrase each, and the phrase has to say what the ward is *for*. */
+export const WARD_ROLE: Record<WardKind, string> = {
+  lantern: 'light',
+  iron: 'damage, in light',
+  salt: 'damage, in the dark',
+  bottle: 'catches three',
+  bell: 'reveals everything',
+}
+
+export const WARD_COST: Record<WardKind, number> = {
+  lantern: LANTERN.cost,
+  iron: COLD_IRON.cost,
+  salt: SALT.cost,
+  bottle: BOTTLE_TREE.cost,
+  bell: CHURCH_BELL.cost,
 }
 
 function sameRoad(a: Vec2[], b: Vec2[]): boolean {
@@ -195,6 +227,11 @@ export interface GameState {
   placementBlocker: string | null
   lanternCost: number
   ironCost: number
+  /** The whole roster, in HUD order, already priced against what the player can afford. */
+  wards: { id: WardKind; name: string; role: string; cost: number; affordable: boolean }[]
+  /** §5: null until one is built. */
+  bellReady: boolean | null
+  bellCooldown: number
   /** Radii the player actually gets, which are not the lantern's nominal radius. */
   litRadius: number
   dimRadius: number
@@ -273,6 +310,10 @@ export class Game {
   private corpses: Corpse[] = []
   private lanterns: Lantern[] = []
   private irons: ColdIron[] = []
+  private salts: SaltLine[] = []
+  private bottles: BottleTree[] = []
+  /** §5: one per map. */
+  private bell: ChurchBell | null = null
   private bubbles: Bubble[] = []
   private bellyLight!: Light
   private selectedWard: WardId = 'lantern'
@@ -477,10 +518,10 @@ export class Game {
       if (key === ' ') {
         e.preventDefault()
         this.setPaused(!this.paused)
-      } else if (key === '1') {
-        this.selectedWard = 'lantern'
-      } else if (key === '2') {
-        this.selectedWard = 'iron'
+      } else if (key >= '1' && key <= '5') {
+        this.selectedWard = WARD_ORDER[Number(key) - 1]
+      } else if (key === 'c') {
+        this.ringBell()
       } else if (key === 'x') {
         this.showBelly()
       } else if (key === 'b') {
@@ -610,6 +651,23 @@ export class Game {
     this.kara.throwBall(this.pointer.x, this.pointer.y)
   }
 
+  /**
+   * §5. Ring the bell. Everything on the board stops and becomes visible — and **stays
+   * unkillable**, because Dim always was. It buys information and a held breath, not a
+   * kill, and it costs Kara's ears for three seconds: you cannot ring it and also read
+   * the dark the way you normally do.
+   */
+  ringBell() {
+    if (this.inputLocked || !this.bell) return
+    if (!this.bell.ring()) return
+
+    for (const enemy of this.enemies) {
+      enemy.stagger(CHURCH_BELL.stagger)
+      enemy.reveal(CHURCH_BELL.reveal)
+    }
+    this.kara.deafen(CHURCH_BELL.deafens)
+  }
+
   /** §3.2 Hold. Only exists on a night the Rope is equipped. */
   hold() {
     if (this.inputLocked) return
@@ -677,6 +735,8 @@ export class Game {
 
   /** The placed ward under a point, lanterns first — their lamps sit above the road. */
   private wardAt(x: number, y: number): Lantern | ColdIron | null {
+    // Only upgradable wards are selectable. Salt, the tree and the bell have no branches,
+    // so a click on one would open an empty panel and eat a placement.
     for (const l of this.lanterns) if (l.contains(x, y)) return l
     for (const s of this.irons) if (s.contains(x, y)) return s
     return null
@@ -700,7 +760,9 @@ export class Game {
     const kind = this.selectedKind
     if (!this.selected || !kind) return
 
-    const id = BRANCHES_FOR[kind][slot === 0 ? 0 : 1]
+    const branches = BRANCHES_FOR[kind]
+    if (!branches) return
+    const id = branches[slot === 0 ? 0 : 1]
     if (!this.selected.upgrades.canTake(id)) return
     if (this.oil < this.selected.upgrades.nextCost(id)) return
 
@@ -713,7 +775,7 @@ export class Game {
     if (!this.selected || !kind) return null
 
     const ward = this.selected
-    const branches: BranchOption[] = BRANCHES_FOR[kind].map((id) => {
+    const branches: BranchOption[] = (BRANCHES_FOR[kind] ?? []).map((id) => {
       const def = BRANCHES[id]
       const tier = ward.upgrades.branch === id ? ward.upgrades.tier : 0
       const open = ward.upgrades.canTake(id)
@@ -783,7 +845,7 @@ export class Game {
   }
 
   private wardCost(id: WardId): number {
-    return id === 'lantern' ? LANTERN.cost : COLD_IRON.cost
+    return WARD_COST[id]
   }
 
   /** Why the selected ward cannot go here, or null if it can. */
@@ -800,10 +862,20 @@ export class Game {
       for (const l of this.lanterns) {
         if (Math.hypot(l.x - x, l.y - y) < LANTERN.minSpacing) return 'too close to another lantern'
       }
-    } else {
+    } else if (this.selectedWard === 'iron') {
       for (const s of this.irons) {
         if (Math.hypot(s.x - x, s.y - y) < COLD_IRON.minSpacing) return 'too close to other iron'
       }
+    } else if (this.selectedWard === 'salt') {
+      for (const s of this.salts) {
+        if (Math.hypot(s.x - x, s.y - y) < SALT.minSpacing) return 'too close to another line'
+      }
+    } else if (this.selectedWard === 'bottle') {
+      for (const b of this.bottles) {
+        if (Math.hypot(b.x - x, b.y - y) < BOTTLE_TREE.radius) return 'too close to another tree'
+      }
+    } else if (this.selectedWard === 'bell' && this.bell) {
+      return 'there is only one bell'
     }
     return null
   }
@@ -828,6 +900,19 @@ export class Game {
 
     const blocked = this.placementBlocker(x, y) !== null
 
+    if (this.selectedWard === 'bottle' || this.selectedWard === 'bell') {
+      // Both are radius-or-nothing: the tree catches inside a circle, the bell is a
+      // fixture with no footprint at all beyond where it stands.
+      const color = blocked ? 0xff8f6b : this.selectedWard === 'bottle' ? 0x6fd8e8 : 0xd8c78a
+      const r = this.selectedWard === 'bottle' ? BOTTLE_TREE.radius : 32
+      this.preview
+        .circle(x, y, r)
+        .fill({ color, alpha: blocked ? 0.04 : 0.08 })
+        .circle(x, y, r)
+        .stroke({ width: 1.5, color, alpha: blocked ? 0.4 : 0.7 })
+      return
+    }
+
     if (this.selectedWard === 'lantern') {
       const litR = LANTERN.radius * reachFraction(LANTERN.intensity, BAND_LIT)
       const dimR = LANTERN.radius * reachFraction(LANTERN.intensity, BAND_DIM)
@@ -844,12 +929,14 @@ export class Game {
         .circle(x, y, litR)
         .stroke({ width: 1.5, color, alpha: blocked ? 0.4 : 0.75 })
     } else {
-      const color = blocked ? 0xff8f6b : 0x9fb8cf
-      const angle = this.roadAngleAt(x, y)
+      // Iron lies along the road; salt lies across it. Same drawing, quarter turn apart.
+      const salt = this.selectedWard === 'salt'
+      const color = blocked ? 0xff8f6b : salt ? 0xe8eef0 : 0x9fb8cf
+      const angle = this.roadAngleAt(x, y) + (salt ? Math.PI / 2 : 0)
       const cos = Math.cos(angle)
       const sin = Math.sin(angle)
-      const hl = COLD_IRON.length / 2
-      const hw = COLD_IRON.width / 2
+      const hl = (salt ? SALT.length : COLD_IRON.length) / 2
+      const hw = (salt ? SALT.width : COLD_IRON.width) / 2
       const corners: [number, number][] = [
         [-hl, -hw],
         [hl, -hw],
@@ -984,10 +1071,23 @@ export class Game {
       this.lanterns.push(lantern)
       this.actors.addChild(lantern.gfx)
       this.bloom.source.addChild(lantern.emissive)
-    } else {
+    } else if (this.selectedWard === 'iron') {
       const iron = new ColdIron(x, y, this.roadAngleAt(x, y))
       this.irons.push(iron)
       this.actors.addChild(iron.gfx)
+    } else if (this.selectedWard === 'salt') {
+      // Across the road, not along it — the ward auto-orients so the player never has to
+      // think about it, the same way iron does.
+      const salt = new SaltLine(x, y, this.roadAngleAt(x, y))
+      this.salts.push(salt)
+      this.actors.addChild(salt.gfx)
+    } else if (this.selectedWard === 'bottle') {
+      const tree = new BottleTree(x, y)
+      this.bottles.push(tree)
+      this.actors.addChild(tree.gfx)
+    } else {
+      this.bell = new ChurchBell(x, y)
+      this.actors.addChild(this.bell.gfx)
     }
   }
 
@@ -1125,6 +1225,24 @@ export class Game {
       s.gfx.destroy({ children: true })
     }
     this.irons = []
+
+    for (const s of this.salts) {
+      this.actors.removeChild(s.gfx)
+      s.gfx.destroy({ children: true })
+    }
+    this.salts = []
+
+    for (const b of this.bottles) {
+      this.actors.removeChild(b.gfx)
+      b.gfx.destroy({ children: true })
+    }
+    this.bottles = []
+
+    if (this.bell) {
+      this.actors.removeChild(this.bell.gfx)
+      this.bell.gfx.destroy({ children: true })
+      this.bell = null
+    }
 
     for (const b of this.bubbles) {
       this.lighting.remove(b.light)
@@ -1311,6 +1429,17 @@ export class Game {
       }
     }
 
+    // Salt does not care about the light. It is the one thing that does not.
+    for (const salt of this.salts) {
+      for (const hit of salt.update(this.enemies, this.lighting)) this.sparks.burst(hit.x, hit.y)
+    }
+
+    for (const tree of this.bottles) {
+      for (const hit of tree.update(dt, this.enemies, this.lighting)) this.sparks.burst(hit.x, hit.y)
+    }
+
+    this.bell?.animate(dt)
+
     // The Tallow Man wants the lanterns and the Bone Dog wants Kara, so an enemy has to
     // be able to see more of the board than the road it is standing on.
     const context: EnemyContext = {
@@ -1381,7 +1510,11 @@ export class Game {
         this.actors.removeChild(enemy.gfx)
         enemy.gfx.destroy({ children: true })
       } else {
-        this.oil += OIL_PER_LIT_KILL
+        // §9: +4 for a kill in the light, +2 outside it. The differential is the whole
+        // economy of salt — it is the cheap answer to a lane you cannot afford to light,
+        // and it keeps you too poor to light it.
+        const lit = this.lighting.lightAt(enemy.x, enemy.y) >= BAND_LIT
+        this.oil += lit ? OIL_PER_LIT_KILL : OIL_PER_DARK_KILL
         this.sparks.wisp(enemy.x, enemy.y)
         this.corpses.push(new Corpse(enemy.gfx))
         // §9: one item per three kills. It is *owed* here, not banked — she still has to
@@ -1646,6 +1779,15 @@ export class Game {
       placementBlocker: this.placementBlocker(this.pointer.x, this.pointer.y),
       lanternCost: LANTERN.cost,
       ironCost: COLD_IRON.cost,
+      wards: WARD_ORDER.map((id) => ({
+        id,
+        name: WARD_NAME[id],
+        role: WARD_ROLE[id],
+        cost: WARD_COST[id],
+        affordable: this.oil >= WARD_COST[id] && !(id === 'bell' && this.bell !== null),
+      })),
+      bellReady: this.bell ? this.bell.ready : null,
+      bellCooldown: this.bell?.cooldownRemaining ?? 0,
       litRadius: LANTERN.radius * reachFraction(LANTERN.intensity, BAND_LIT),
       dimRadius: LANTERN.radius * reachFraction(LANTERN.intensity, BAND_DIM),
       selection: this.describeSelection(),

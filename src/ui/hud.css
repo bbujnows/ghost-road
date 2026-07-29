@@ -228,6 +228,21 @@ kbd {
   color: #9fb8cf;
 }
 
+.ward.short .ward-cost {
+  color: #ff8f6b;
+}
+
+.ward.short {
+  opacity: 0.6;
+}
+
+/* The bell is the only ward with a verb, so its row reads as an action, not a purchase. */
+.bell-row {
+  margin-top: 4px;
+  border-top: 1px solid rgba(198, 214, 210, 0.1);
+  padding-top: 6px;
+}
+
 .kara-panel {
   min-width: 172px;
   gap: 5px;

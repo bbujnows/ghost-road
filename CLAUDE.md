@@ -29,10 +29,9 @@ order — pick by what the game needs. In rough order of what it is missing most
 2. ~~Bond and the ball stash~~ — **built 2026-07-29** (§3.4a). Bond is escrowed for the length of a
    night and only committed when the night is held; stash banks immediately and survives a retry.
    That asymmetry is the consult's §6 anti-exploit and must not be flattened.
-3. **The remaining wards** — salt, bell, spring line, bottle tree, fiddler. Now the highest-value
-   item: two wards is still not a roster, and the stash shop has nothing to sell without them
-   (measured: 94 stash banked against a 72-cost shop). The Bottle Tree also makes the Tallow Man's
-   light resist live for the first time.
+3. ~~The remaining wards~~ — **salt, the Bottle Tree and the Church Bell built 2026-07-29** (§5.3).
+   The Spring Line needs detour pathfinding and the Fiddler should land last; both are blocked
+   rather than deferred. **Reprice the stash shop now that there is more to sell.**
 4. **Hard mode's scars** (§7.2). Without them a Long Road run ends on the first loss.
 5. **Lead** (bond T4) and the hose (§3.3) — the last two of Kara's specified abilities.
 6. **The blocked bosses** — Snallygaster (aerial pathing), Drownd Girl (salt + water + light damage),
@@ -207,6 +206,9 @@ native binary downloaded corrupt. Fix with `npm install lightningcss-win32-x64-m
 - **`as const` infers literal types.** `private charges = BUBBLES.maxCharges` is typed `2`, not
   `number`, and any assignment fails. Annotate `: number` on fields initialised from a balance
   constant.
+- **`DARK_CAPABLE` is the only sanctioned bypass of the light rule, and only salt may use it.**
+  `applyDamage` still floors every other threshold at Dim. If a second ward ever needs it, that is a
+  design decision, not a plumbing one — §2.1 is the game.
 - **At most two heavy modifiers on any one night** (fog, wind, an oil cut, a boss). Stacked-modifier
   difficulty is super-linear while oil compensation is linear. This rule was written for the Nightly
   Road generator and then broken by hand-authored Night 6, which is the expensive kind of mistake:

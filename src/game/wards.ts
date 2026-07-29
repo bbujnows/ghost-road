@@ -1,5 +1,15 @@
 import { Container, Graphics } from 'pixi.js'
-import { BRANCHES, COLD_IRON, IRON_BASE, LANTERN, LANTERN_BASE } from './balance'
+import {
+  BOTTLE_TREE,
+  BRANCHES,
+  CHURCH_BELL,
+  COLD_IRON,
+  DARK_CAPABLE,
+  IRON_BASE,
+  LANTERN,
+  LANTERN_BASE,
+  SALT,
+} from './balance'
 import type { BranchId, IronTier, LanternTier } from './balance'
 import type { Light, LightingSystem } from './lighting'
 import type { Enemy } from './enemies'
@@ -229,6 +239,296 @@ export class Lantern {
           .fill({ color: 0x9aa7ad, alpha: 0.22 * fade * (1 - t) })
       }
     }
+  }
+}
+
+/**
+ * The Salt Line. **The exception that proves the light rule.**
+ *
+ * Not a light, not a trap, and the only damage in this game that does not care whether
+ * you can see what it is hurting — it passes `DARK_CAPABLE`, which every other ward is
+ * forbidden. Laid *across* the road rather than along it, because that is what a salt
+ * line is: a thing you make them pay to cross.
+ *
+ * It is the cheap answer to a lane you cannot afford to light, and §9 makes sure it stays
+ * cheap in the wrong direction: a kill outside the light pays 2 oil against 4 inside it.
+ * Salt buys you road and keeps you poor.
+ */
+export class SaltLine {
+  readonly gfx = new Container()
+  readonly x: number
+  readonly y: number
+  /** Perpendicular to the road, unlike iron. */
+  readonly angle: number
+
+  private left: number = SALT.crossings
+  private grains = new Graphics()
+  private crossed = new Set<Enemy>()
+
+  constructor(x: number, y: number, roadAngle: number) {
+    this.x = x
+    this.y = y
+    this.angle = roadAngle + Math.PI / 2
+
+    this.draw()
+    this.gfx.addChild(this.grains)
+    this.gfx.position.set(x, y)
+    this.gfx.rotation = this.angle
+  }
+
+  get spent() {
+    return this.left <= 0
+  }
+
+  get remaining() {
+    return this.left
+  }
+
+  private draw() {
+    const g = this.grains.clear()
+    const L = SALT.length
+    const wear = this.left / SALT.crossings
+
+    // A poured line, not a painted one: scattered grains, thinning as it is used up.
+    for (let i = 0; i < 90; i++) {
+      const t = (i / 89 - 0.5) * L
+      // The ends go first, because that is where they step around it.
+      const edge = 1 - Math.abs(t) / (L / 2)
+      if (Math.random() > wear * 0.65 + edge * 0.35) continue
+      g.circle(t + (Math.random() - 0.5) * 6, (Math.random() - 0.5) * SALT.width, 0.9 + Math.random() * 1.4)
+        .fill({ color: 0xe8eef0, alpha: 0.4 + Math.random() * 0.45 })
+    }
+  }
+
+  contains(px: number, py: number): boolean {
+    const dx = px - this.x
+    const dy = py - this.y
+    const cos = Math.cos(-this.angle)
+    const sin = Math.sin(-this.angle)
+    const lx = dx * cos - dy * sin
+    const ly = dx * sin + dy * cos
+    return Math.abs(lx) <= SALT.length / 2 && Math.abs(ly) <= SALT.width / 2
+  }
+
+  /**
+   * Charges anything that steps over it, once. `crossed` is what makes it a *line* rather
+   * than a strip: standing on salt costs nothing, crossing it costs everything.
+   */
+  update(enemies: Enemy[], lighting: LightingSystem): { x: number; y: number }[] {
+    if (this.spent) return []
+
+    const hits: { x: number; y: number }[] = []
+    for (const e of enemies) {
+      const on = this.contains(e.x, e.y)
+      if (!on) {
+        this.crossed.delete(e)
+        continue
+      }
+      if (this.crossed.has(e)) continue
+      this.crossed.add(e)
+
+      if (e.applyDamage(SALT.damage, 'salt', lighting, DARK_CAPABLE) > 0) {
+        e.slowUntil = SALT.slowFor
+        e.slowStrength = SALT.slow
+        hits.push({ x: e.x, y: e.y })
+        this.left -= 1
+        this.draw()
+        if (this.spent) break
+      }
+    }
+    return hits
+  }
+}
+
+/**
+ * The Bottle Tree. Blue glass on bare branches — folklore says haints go in and cannot get
+ * back out, and the sun takes them in the morning.
+ *
+ * Three bottles, one thing each. **Its damage is light-typed**, which is what finally makes
+ * the Tallow Man's 50% light resist a live number rather than declared data; it has been
+ * sitting inert in the roster since the counterplay pass waiting for exactly this ward.
+ */
+export class BottleTree {
+  readonly gfx = new Container()
+  readonly x: number
+  readonly y: number
+
+  /** Per bottle: what it holds and for how long, or the recharge if it is empty. */
+  private bottles: { holding: Enemy | null; timer: number }[] = []
+  private glass = new Graphics()
+
+  constructor(x: number, y: number) {
+    this.x = x
+    this.y = y
+    for (let i = 0; i < BOTTLE_TREE.bottles; i++) this.bottles.push({ holding: null, timer: 0 })
+
+    const trunk = new Graphics()
+    trunk.ellipse(0, 1, 12, 4).fill({ color: 0x000000, alpha: 0.3 })
+    trunk.moveTo(-3, 0).lineTo(-2, -34).lineTo(2, -34).lineTo(3, 0).fill(0x3b332a)
+    // Bare branches, cut short so a bottle can be pushed onto each one.
+    for (const [ex, ey] of [
+      [-14, -40],
+      [14, -42],
+      [0, -50],
+    ] as const) {
+      trunk.moveTo(0, -28).quadraticCurveTo(ex * 0.5, -36, ex, ey).stroke({ width: 2.4, color: 0x3b332a, cap: 'round' })
+    }
+
+    this.gfx.addChild(trunk, this.glass)
+    this.gfx.position.set(x, y)
+  }
+
+  private static readonly HOOKS = [
+    { x: -14, y: -40 },
+    { x: 14, y: -42 },
+    { x: 0, y: -50 },
+  ]
+
+  contains(px: number, py: number): boolean {
+    return Math.hypot(px - this.x, py - (this.y - 30)) < 30
+  }
+
+  get full() {
+    return this.bottles.filter((b) => b.holding).length
+  }
+
+  update(dt: number, enemies: Enemy[], lighting: LightingSystem): { x: number; y: number }[] {
+    const released: { x: number; y: number }[] = []
+
+    for (const bottle of this.bottles) {
+      bottle.timer = Math.max(0, bottle.timer - dt)
+
+      if (bottle.holding) {
+        // Keep it held wherever it was standing; the glass does not drag it anywhere.
+        bottle.holding.frozen = Math.max(bottle.holding.frozen, 0.12)
+        if (bottle.timer > 0) continue
+
+        const caught = bottle.holding
+        bottle.holding = null
+        bottle.timer = BOTTLE_TREE.recharge
+        caught.bottled = false
+        // Light, so a Tallow Man shrugs half of it off. That is the counterplay working.
+        if (caught.applyDamage(BOTTLE_TREE.damage, 'light', lighting) > 0) {
+          released.push({ x: caught.x, y: caught.y })
+        }
+        continue
+      }
+
+      if (bottle.timer > 0) continue
+
+      for (const e of enemies) {
+        if (e.bottled || e.dead) continue
+        if (Math.hypot(e.x - this.x, e.y - this.y) > BOTTLE_TREE.radius) continue
+        e.bottled = true
+        bottle.holding = e
+        bottle.timer = BOTTLE_TREE.holdFor
+        break
+      }
+    }
+
+    this.drawGlass()
+    return released
+  }
+
+  private drawGlass() {
+    const g = this.glass.clear()
+    for (let i = 0; i < this.bottles.length; i++) {
+      const hook = BottleTree.HOOKS[i]
+      const bottle = this.bottles[i]
+      const charged = bottle.holding !== null
+      const empty = !charged && bottle.timer > 0
+
+      // Body, neck, and — when something is in it — a pale shape turning inside.
+      g.moveTo(hook.x - 4, hook.y)
+        .quadraticCurveTo(hook.x - 5, hook.y + 11, hook.x, hook.y + 13)
+        .quadraticCurveTo(hook.x + 5, hook.y + 11, hook.x + 4, hook.y)
+        .lineTo(hook.x + 1.6, hook.y - 4)
+        .lineTo(hook.x - 1.6, hook.y - 4)
+        .fill({ color: charged ? 0x6fd8e8 : 0x2f6f8c, alpha: empty ? 0.25 : 0.7 })
+
+      if (charged) {
+        g.circle(hook.x, hook.y + 7, 2.6).fill({ color: 0xdff6ff, alpha: 0.65 })
+      }
+      g.moveTo(hook.x - 2.5, hook.y + 2)
+        .quadraticCurveTo(hook.x - 3.4, hook.y + 8, hook.x - 1.4, hook.y + 11)
+        .stroke({ width: 0.9, color: 0xd8f2ff, alpha: empty ? 0.15 : 0.45 })
+    }
+  }
+}
+
+/**
+ * The Church Bell. One per map, rung by hand, and the only ward that touches the whole
+ * board at once.
+ *
+ * **It reveals and it stops. It does not kill.** Forcing everything to Dim makes it
+ * visible and pointedly not damageable — the bell buys information and a held breath, and
+ * you still have to have built something to spend them on.
+ *
+ * It also folds Kara's ears for three seconds. Ringing it costs the instrument you
+ * normally read the dark with, which is the trade that stops it being a free button.
+ */
+export class ChurchBell {
+  readonly gfx = new Container()
+  readonly x: number
+  readonly y: number
+
+  private cooldown = 0
+  private swing = 0
+  private bellGfx = new Container()
+
+  constructor(x: number, y: number) {
+    this.x = x
+    this.y = y
+
+    const frame = new Graphics()
+    frame.ellipse(0, 1, 14, 4).fill({ color: 0x000000, alpha: 0.32 })
+    // A hanging frame: two posts and a crossbeam.
+    frame.rect(-13, -44, 4, 44).fill(0x4a3d30)
+    frame.rect(9, -44, 4, 44).fill(0x4a3d30)
+    frame.rect(-15, -48, 30, 5).fill(0x3d3128)
+
+    const bell = new Graphics()
+    bell
+      .moveTo(-8, -4)
+      .quadraticCurveTo(-8, -20, 0, -22)
+      .quadraticCurveTo(8, -20, 8, -4)
+      .lineTo(-8, -4)
+      .fill(0x8d7a4a)
+    bell.rect(-9.5, -4, 19, 3).fill(0x7a6840)
+    bell.circle(0, -1, 1.8).fill(0x5c4e30)
+    bell.moveTo(-1.4, -24).lineTo(1.4, -24).lineTo(1.4, -22).lineTo(-1.4, -22).fill(0x5c4e30)
+    this.bellGfx.position.set(0, -42)
+    this.bellGfx.addChild(bell)
+
+    this.gfx.addChild(frame, this.bellGfx)
+    this.gfx.position.set(x, y)
+  }
+
+  get ready() {
+    return this.cooldown <= 0
+  }
+
+  get cooldownRemaining() {
+    return Math.max(0, this.cooldown)
+  }
+
+  contains(px: number, py: number): boolean {
+    return Math.hypot(px - this.x, py - (this.y - 30)) < 32
+  }
+
+  /** Returns false if it is still cooling. */
+  ring(): boolean {
+    if (!this.ready) return false
+    this.cooldown = CHURCH_BELL.cooldown
+    this.swing = 1
+    return true
+  }
+
+  animate(dt: number) {
+    this.cooldown = Math.max(0, this.cooldown - dt)
+    this.swing = Math.max(0, this.swing - dt * 0.55)
+    // Rings hard and settles slowly, which is the only animation it needs.
+    this.bellGfx.rotation = Math.sin(this.swing * 34) * 0.5 * this.swing * this.swing
   }
 }
 

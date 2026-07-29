@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Game } from './game/Game'
-import type { GameState, Mode } from './game/Game'
+import type { GameState, Mode, WardId } from './game/Game'
 import type { ToyId } from './game/toys'
 import { Hud } from './ui/Hud'
 import './App.css'
@@ -36,7 +36,8 @@ export default function App() {
   const resume = useCallback(() => gameRef.current?.resume(), [])
   const restart = useCallback(() => gameRef.current?.restart(), [])
   const toggleSpeed = useCallback(() => gameRef.current?.toggleSpeed(), [])
-  const selectWard = useCallback((id: 'lantern' | 'iron') => gameRef.current?.selectWard(id), [])
+  const selectWard = useCallback((id: WardId) => gameRef.current?.selectWard(id), [])
+  const ringBell = useCallback(() => gameRef.current?.ringBell(), [])
   const buyUpgrade = useCallback((slot: number) => gameRef.current?.buyUpgrade(slot), [])
   const restartCampaign = useCallback(() => gameRef.current?.restartCampaign(), [])
   const chooseToy = useCallback((id: ToyId) => gameRef.current?.chooseToy(id), [])
@@ -57,6 +58,7 @@ export default function App() {
           onRestart={restart}
           onToggleSpeed={toggleSpeed}
           onSelectWard={selectWard}
+          onRingBell={ringBell}
           onBuyUpgrade={buyUpgrade}
           onRestartCampaign={restartCampaign}
           onChooseToy={chooseToy}

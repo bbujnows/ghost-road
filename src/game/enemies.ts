@@ -3,6 +3,7 @@ import {
   BAND_DIM,
   BAND_LIT,
   BELL_WITCH,
+  DARK_CAPABLE,
   BONE_DOG,
   BOSS_GLOW,
   CRAWLER,
@@ -103,6 +104,38 @@ export abstract class Enemy {
    */
   slowFactor = 1
 
+  /**
+   * A slow that outlives the frame it was applied in.
+   *
+   * Iron's slow is per-frame because the strip is still under them; salt's is not — they
+   * crossed a line and carry it with them. Two different shapes, so two mechanisms rather
+   * than one bent to cover both.
+   */
+  slowUntil = 0
+  slowStrength = 1
+
+  /**
+   * Held still — by the Church Bell's stagger, or inside a Bottle Tree's glass. Both stop
+   * movement; only the bottle deals damage when it lets go.
+   */
+  frozen = 0
+  /** True while a bottle has it. Nothing else may catch it. */
+  bottled = false
+  /**
+   * §5 Church Bell: "forces them to Dim band for 6s". Visible whatever the light is doing
+   * — and pointedly still not damageable, because Dim never was.
+   */
+  revealed = 0
+
+  /** The Bell. Stops it where it stands without touching its health. */
+  stagger(seconds: number) {
+    this.frozen = Math.max(this.frozen, seconds)
+  }
+
+  reveal(seconds: number) {
+    this.revealed = Math.max(this.revealed, seconds)
+  }
+
   /** The part that flinches, tints and faces. The shadow stays flat on the ground. */
   protected readonly frame = new Container()
   protected readonly shadow = new Graphics()
@@ -191,7 +224,10 @@ export abstract class Enemy {
     lighting: LightingSystem,
     threshold = BAND_LIT,
   ): number {
-    if (lighting.lightAt(this.x, this.y) < Math.max(BAND_DIM, threshold)) return 0
+    // `DARK_CAPABLE` (0) is the one sanctioned way past the founding rule, and a ward has
+    // to ask for it by name. Every other threshold is still floored at Dim.
+    const needed = threshold <= DARK_CAPABLE ? 0 : Math.max(BAND_DIM, threshold)
+    if (needed > 0 && lighting.lightAt(this.x, this.y) < needed) return 0
 
     const dealt = amount * (1 - (this.resists[type] ?? 0))
     if (dealt <= 0) return 0
@@ -271,6 +307,23 @@ export abstract class Enemy {
   protected abstract animate(dt: number): void
 
   update(dt: number, ctx: EnemyContext) {
+    this.frozen = Math.max(0, this.frozen - dt)
+    this.revealed = Math.max(0, this.revealed - dt)
+
+    // A carried slow stacks with whatever it is standing on, worst wins.
+    this.slowUntil = Math.max(0, this.slowUntil - dt)
+    if (this.slowUntil > 0) this.slowFactor = Math.min(this.slowFactor, this.slowStrength)
+
+    // Held things do not move, do not drift, and do not advance — but they still animate,
+    // so a staggered board reads as arrested rather than as a paused screenshot.
+    if (this.frozen > 0) {
+      this.gait += dt * this.gaitRate * 0.15
+      this.stretch = { x: 1, y: 1 }
+      this.animate(dt)
+      this.present(dt, ctx)
+      return
+    }
+
     this.behave(dt, ctx)
 
     if (!this.offRoad) {
@@ -282,24 +335,31 @@ export abstract class Enemy {
     this.stretch = { x: 1, y: 1 }
     this.animate(dt)
 
+    this.present(dt, ctx)
+
+    // Consumed. Any ward still holding it will write it again next frame.
+    this.slowFactor = 1
+  }
+
+  /** Alpha, position and hit feedback — everything that runs whether it moved or not. */
+  private present(dt: number, ctx: EnemyContext) {
     // §2.1: in the dark band an enemy is invisible, full stop. This is the rule the
-    // whole game is built on, and it has to be literal or none of it lands.
+    // whole game is built on, and it has to be literal or none of it lands — the bell is
+    // the one thing allowed to override it, and it only grants *sight*, never damage.
     const L = ctx.lighting.lightAt(this.x, this.y)
-    this.gfx.alpha = this.alphaAt(L)
+    this.gfx.alpha = this.revealed > 0 ? Math.max(this.alphaAt(L), 0.55) : this.alphaAt(L)
     this.gfx.position.set(this.x, this.y)
 
     // Hit feedback: a scorch flash and a flinch. Tint multiplies, so the flash pushes
     // cold greys toward burnt amber rather than simply brightening them.
     this.hitFlash = Math.max(0, this.hitFlash - dt)
     const hit = this.hitFlash > 0
-    this.frame.tint = hit ? 0xffc9a0 : 0xffffff
+    const held = this.frozen > 0
+    this.frame.tint = hit ? 0xffc9a0 : held ? 0xa8c4d8 : 0xffffff
     this.frame.scale.set(
       this.facing * this.stretch.x * (hit ? 1.05 : 1),
       this.stretch.y * (hit ? 0.96 : 1),
     )
-
-    // Consumed. Any ward still holding it will write it again next frame.
-    this.slowFactor = 1
   }
 }
 
@@ -495,7 +555,7 @@ export class TallowMan extends Enemy {
 
   private target: Snuffable | null = null
   private windup = 0
-  private stagger = 0
+  private rooted = 0
   /**
    * Lanterns Kara has already driven him off. Without this he re-reaches for the same
    * lamp the instant the stagger ends, and a dog parked beside one post locks him out
@@ -569,8 +629,8 @@ export class TallowMan extends Enemy {
   }
 
   protected behave(dt: number, ctx: EnemyContext) {
-    if (this.stagger > 0) {
-      this.stagger -= dt
+    if (this.rooted > 0) {
+      this.rooted -= dt
       this.cowed = Math.min(1, this.cowed + dt * 6)
       return
     }
@@ -587,7 +647,7 @@ export class TallowMan extends Enemy {
       this.target = null
       this.windup = 0
       this.effort = 0
-      this.stagger = TALLOW_MAN.stagger
+      this.rooted = TALLOW_MAN.stagger
       return
     }
 

@@ -256,9 +256,14 @@ export const BRANCHES: Record<
   rail: { ward: 'iron', name: 'Rail Iron', role: 'longer, then slows', tiers: RAIL_TIERS },
 }
 
-export type WardKind = 'lantern' | 'iron'
+/**
+ * Five wards. **Only the first two have upgrade branches** — the roster split (§4) is what
+ * upgrades were built for, and bolting branches onto salt or a bell would be four more
+ * nodes nobody asked for. `BRANCHES_FOR` is deliberately partial.
+ */
+export type WardKind = 'lantern' | 'iron' | 'salt' | 'bottle' | 'bell'
 
-export const BRANCHES_FOR: Record<WardKind, [BranchId, BranchId]> = {
+export const BRANCHES_FOR: Partial<Record<WardKind, [BranchId, BranchId]>> = {
   lantern: ['storm', 'mirror'],
   iron: ['graveyard', 'rail'],
 }
@@ -271,7 +276,88 @@ export const BRANCHES_FOR: Record<WardKind, [BranchId, BranchId]> = {
  * type now costs three lines; inventing a substitute counterplay and unpicking it later
  * would cost a great deal more.
  */
-export type DamageType = 'iron' | 'light'
+export type DamageType = 'iron' | 'light' | 'salt'
+
+/**
+ * The one sanctioned way past the founding rule.
+ *
+ * §2.1 says nothing in the dark can be hurt, and that has been literal since the first
+ * build. **Salt is the exception the consult's roster explicitly wants** ("dark-capable —
+ * the exceptions that prove the light rule"), so a ward may pass this as its threshold to
+ * bite in true darkness. Nothing else may, and `applyDamage` still floors every *other*
+ * threshold at Dim, so the exception has to be asked for by name.
+ */
+export const DARK_CAPABLE = 0
+
+// ─── §5 The rest of the roster ──────────────────────────────────────────────
+
+/**
+ * **Salt Line.** Not a light and not a trap — a line you make them pay to cross, and the
+ * only damage in the game that does not care whether you can see them.
+ *
+ * It is deliberately the cheap answer to a dark lane and it **keeps you poor**: §9 pays
+ * +2 for a kill outside the light against +4 inside it. Salt buys you a stretch of road
+ * you could not afford to light, at the cost of the economy that would let you light it.
+ *
+ * Laid *across* the road rather than along it, which is what a salt line is. Eight
+ * crossings and it is gone (the consult's ruling, up from the doc's six).
+ */
+export const SALT = {
+  cost: 20,
+  /** Across the road bed, not along it. */
+  length: 140,
+  width: 16,
+  damage: 25,
+  /** Speed multiplier applied for `slowFor` seconds after a crossing. */
+  slow: 0.5,
+  slowFor: 2,
+  crossings: 8,
+  minSpacing: 70,
+} as const
+
+/**
+ * **The Bottle Tree.** Blue glass on bare branches; folklore says haints go in and cannot
+ * get out. Catches what walks past and gives it back damaged.
+ *
+ * Its damage is **light-typed**, which finally makes the Tallow Man's 50% light resist a
+ * live number rather than declared data — it has been sitting inert in the roster since
+ * the counterplay pass waiting for exactly this ward.
+ */
+export const BOTTLE_TREE = {
+  cost: 45,
+  radius: 70,
+  /** Bottles hanging at once. Each catches one thing. */
+  bottles: 3,
+  /** How long a caught thing stays in the glass. */
+  holdFor: 4,
+  /** Dealt on release, as light. */
+  damage: 20,
+  /** Per bottle, after it empties. */
+  recharge: 8,
+} as const
+
+/**
+ * **The Church Bell.** One per map, activated, and the only ward that does something to
+ * the whole board at once.
+ *
+ * It reveals and it stops — it does not kill. Forcing everything to Dim makes it *visible*
+ * and pointedly not damageable, so the bell buys you information and a held breath, and
+ * you still have to have built something to use them.
+ *
+ * **It folds Kara's ears for 3s** (consult ruling, softened from the doc's 5). Ringing it
+ * costs you the instrument you normally read the dark with, which is the trade that stops
+ * it being a free button.
+ */
+export const CHURCH_BELL = {
+  cost: 65,
+  cooldown: 45,
+  /** Everything on the board stops for this long. */
+  stagger: 2.5,
+  /** And is visible for this long, whatever the light is doing. */
+  reveal: 6,
+  /** Her ears are useless for this long afterwards. */
+  deafens: 3,
+} as const
 
 // ─── §7 Difficulty and failure ──────────────────────────────────────────────
 
@@ -296,6 +382,15 @@ export const PORCH_DAMAGE = {
 /** Guaranteed, paid when a wave is cleared. The worst-case player can still build. */
 export const OIL_PER_WAVE = 25
 export const OIL_PER_LIT_KILL = 4
+/**
+ * §9: "+4 per enemy killed in the Lit band, +2 per salt kill. The differential is
+ * intentional: salt is the cheap answer to a dark lane, and it keeps you poor."
+ *
+ * Implemented as *where it died* rather than *what killed it*, which is the same thing in
+ * practice — salt is the only damage that reaches into the dark — and does not need the
+ * kill to carry a provenance tag through four systems to get here.
+ */
+export const OIL_PER_DARK_KILL = 2
 
 // ─── §6 Enemy roster ────────────────────────────────────────────────────────
 

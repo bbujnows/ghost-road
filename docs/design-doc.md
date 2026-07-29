@@ -402,9 +402,51 @@ Wards, not guns. Nothing in this game shoots.
 His one tune is *Cold Frost Morning*. The cut tunes survive as his upgrade branches: *Wayfaring
 Stranger* (radius branch) and *Shady Grove* (Kara-speed branch).
 
+### 5.3 The rest of the roster (built 2026-07-29)
+
+Five wards now. **Salt, the Bottle Tree and the Church Bell have no upgrade branches** — branches
+were built for the light/damage split (§5.2) and bolting four more nodes onto wards that do not need
+them is sprawl, not identity.
+
+**Salt Line — 20 oil.** The exception that proves the light rule: it passes `DARK_CAPABLE`, the one
+sanctioned bypass of §2.1, and it is the only damage in the game that does not care whether you can
+see what it is hurting. Laid *across* the road, because that is what a salt line is. 25 damage and a
+2s half-speed slow per crossing, **eight crossings and it is gone.**
+
+> Measured, it is a patch and not a position: 20 oil kills **four walkers, ever**, against a lantern
+> and a strip (40 oil) that kill walkers for as long as they stand. And §9's differential does the
+> rest — a kill outside the light pays 2 oil against 4 inside it, so twelve walkers killed on salt
+> is 24 oil you did not earn, which is **1.6 lanterns you cannot now buy.** Salt buys you a lane you
+> could not afford to light and keeps you unable to afford to light it.
+
+**Bottle Tree — 45 oil.** Three bottles, one thing each, 4s inside the glass and 20 damage on
+release, 8s recharge per bottle. **Its damage is light-typed**, which is what finally makes the
+Tallow Man's 50% light resist a live number — it has been inert in the roster since the counterplay
+pass waiting for exactly this ward. He needs 9 releases where anything else needs 5.
+
+> 15 catches a minute at 45 oil. It is crowd control that happens to hurt, not a damage ward, and it
+> is priced as the former.
+
+**Church Bell — 65 oil, one per map, rung with `C`, 45s cooldown.** Stops everything on the board
+for 2.5s and forces it all to Dim for 6s. **It reveals and it stops; it never kills** — Dim was
+always unkillable, so the bell buys information and a held breath and you still have to have built
+something to spend them on. That is what lets a global effect cost only 65.
+
+> It folds Kara's ears for **3s** (consult ruling, softened from the doc's 5). Ringing it costs the
+> instrument you normally read the dark with, which is the trade that stops it being a free button.
+> Measured: ~3.3s of board-wide freeze per minute, and 2.5s is 7% of a walker's entire traverse.
+
+**Two wards remain unbuilt, and both are blocked rather than deferred:**
+
+- **The Spring Line** needs enemies to *path around* a barrier. Everything on the board follows the
+  road polyline or steers directly for the homestead; there is no detour logic and adding it is a
+  larger change than the ward. §3.3's softened water rules wait on it too.
+- **The Fiddler** is a damage-multiplier aura. It is the least interesting thing left and the only
+  one that makes other wards better rather than doing something itself — it should land last, when
+  there is enough roster for a multiplier to be a choice rather than a flat upgrade.
+
 **The roster split is built** (2026-07-27): Lantern Post is pure light, Cold Iron is the damage
-layer. Still to come from [redesign-consult.md](redesign-consult.md) §4: the **Bottle Tree**
-(45 oil, traps three enemies — the Hant Cat's counter) and the remaining wards.
+layer.
 
 ### 5.2 Upgrade branches (built 2026-07-28)
 

@@ -18,7 +18,8 @@ const BAND_LABEL = {
 } as const
 
 const CONTROLS = [
-  { key: '1 / 2', label: 'Select ward' },
+  { key: '1–5', label: 'Select ward' },
+  { key: 'C', label: 'Ring the bell' },
   { key: 'Left click', label: 'Place it, or pick one to upgrade' },
   { key: 'Q / E', label: 'Buy an upgrade branch' },
   { key: 'Right click', label: 'Send Kara' },
@@ -363,7 +364,8 @@ export interface HudProps {
   onResume: () => void
   onRestart: () => void
   onToggleSpeed: () => void
-  onSelectWard: (id: 'lantern' | 'iron') => void
+  onSelectWard: (id: GameState['selectedWard']) => void
+  onRingBell: () => void
   onBuyUpgrade: (slot: number) => void
   onRestartCampaign: () => void
   onChooseToy: (id: ToyId) => void
@@ -483,6 +485,7 @@ export function Hud({
   onRestart,
   onToggleSpeed,
   onSelectWard,
+  onRingBell,
   onBuyUpgrade,
   onRestartCampaign,
   onChooseToy,
@@ -583,24 +586,29 @@ export function Hud({
           <UpgradePanel state={state} onBuy={onBuyUpgrade} />
         ) : (
         <div className="panel wards">
-          <div
-            className={`ward ${state.selectedWard === 'lantern' ? 'selected' : ''}`}
-            onClick={() => onSelectWard('lantern')}
-          >
-            <kbd>1</kbd>
-            <span className="ward-name">Lantern Post</span>
-            <span className="ward-role">light</span>
-            <span className="ward-cost">{state.lanternCost}</span>
-          </div>
-          <div
-            className={`ward ${state.selectedWard === 'iron' ? 'selected' : ''}`}
-            onClick={() => onSelectWard('iron')}
-          >
-            <kbd>2</kbd>
-            <span className="ward-name">Cold Iron</span>
-            <span className="ward-role">damage, in light</span>
-            <span className="ward-cost">{state.ironCost}</span>
-          </div>
+          {state.wards.map((w, i) => (
+            <div
+              key={w.id}
+              className={`ward ${state.selectedWard === w.id ? 'selected' : ''} ${w.affordable ? '' : 'short'}`}
+              onClick={() => onSelectWard(w.id)}
+            >
+              <kbd>{i + 1}</kbd>
+              <span className="ward-name">{w.name}</span>
+              <span className="ward-role">{w.role}</span>
+              <span className="ward-cost">{w.cost}</span>
+            </div>
+          ))}
+          {/* §5: the bell is placed once and then rung. It is the only ward with a verb. */}
+          {state.bellReady !== null && (
+            <div className={`ward bell-row ${state.bellReady ? 'selected' : ''}`} onClick={onRingBell}>
+              <kbd>C</kbd>
+              <span className="ward-name">Ring it</span>
+              <span className="ward-role">stops and reveals · costs her ears</span>
+              <span className="ward-cost">
+                {state.bellReady ? 'ready' : `${Math.ceil(state.bellCooldown)}s`}
+              </span>
+            </div>
+          )}
           <span className="hint">
             {state.placementBlocker ? (
               <span className="blocked">{state.placementBlocker}</span>

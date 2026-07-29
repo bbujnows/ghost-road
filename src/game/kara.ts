@@ -686,6 +686,23 @@ export class Kara {
   }
 
   /**
+   * §5 Church Bell. It rings and she cannot hear anything else for a moment.
+   *
+   * This is the bell's whole price. It reveals the entire board and freezes it, and in
+   * exchange the player loses the instrument they normally read the dark with — so the
+   * bell is not a free button, it is a trade of one kind of sight for another.
+   */
+  deafen(seconds: number) {
+    this.deafFor = Math.max(this.deafFor, seconds)
+  }
+
+  get deafened() {
+    return this.deafFor > 0
+  }
+
+  private deafFor = 0
+
+  /**
    * §3.2 Hold, granted by the Rope (§4). She plants herself and nothing gets past. `H`
    * again lets go early, which matters — the full 8 seconds costs her half her health,
    * and a player who cannot stop paying will simply never press it.
@@ -957,6 +974,10 @@ export class Kara {
     // ears up for nine seconds at a stretch and the signal would mean nothing.
     let listening: Threat | null = null
     let nearest = Infinity
+
+    // The bell just went. She cannot pick anything out of that.
+    this.deafFor = Math.max(0, this.deafFor - dt)
+    if (this.deafFor > 0) threats = []
 
     for (const t of threats) {
       const d = Math.hypot(t.x - this.x, t.y - this.y)
