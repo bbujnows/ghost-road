@@ -146,6 +146,47 @@ function ToyPicker({ toy, onChoose }: { toy: ToyId; onChoose: (id: ToyId) => voi
 }
 
 /**
+ * §7.2. What today's road drew, and where the streak stands.
+ *
+ * The toy is *shown*, not chosen. Everyone gets the same one, which is what makes the
+ * day comparable — the loadout is part of the puzzle rather than a lever you pull.
+ */
+function NightlyBrief({ state }: { state: GameState }) {
+  const toy = TOYS.find((t) => t.id === state.toy)
+
+  return (
+    <div className="toys">
+      <p className="eyebrow">Tonight, for everybody</p>
+
+      {state.nightlyModifiers.length > 0 && (
+        <div className="draw">
+          {state.nightlyModifiers.map((m) => (
+            <span key={m} className="draw-chip">
+              {m}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {toy && (
+        <div className="toy chosen">
+          <span className="toy-name">{toy.name}</span>
+          <span className="toy-effect">{toy.effect}</span>
+          {toy.cost && <span className="toy-cost">{toy.cost}</span>}
+        </div>
+      )}
+
+      <p className="streak-line">
+        {state.streak > 0
+          ? `${state.streak} night${state.streak > 1 ? 's' : ''} held in a row`
+          : 'No streak going.'}
+        {state.bestStreak > 0 && <span className="sub"> · best {state.bestStreak}</span>}
+      </p>
+    </div>
+  )
+}
+
+/**
  * The upgrade tree for whichever placed ward is selected.
  *
  * Two branches, and taking a tier in one closes the other for good — so the panel has
@@ -210,6 +251,7 @@ export interface HudProps {
   onBuyUpgrade: (slot: number) => void
   onRestartCampaign: () => void
   onChooseToy: (id: ToyId) => void
+  onSetMode: (mode: GameState['mode']) => void
 }
 
 /**
@@ -325,6 +367,7 @@ export function Hud({
   onBuyUpgrade,
   onRestartCampaign,
   onChooseToy,
+  onSetMode,
 }: HudProps) {
   if (!state) return null
 
@@ -335,7 +378,9 @@ export function Hud({
       <div className="hud-top">
         <div className="panel">
           <span className="label">
-            {state.nightName} · {state.night}/{state.nightCount}
+            {state.mode === 'nightly'
+              ? `Nightly · ${state.nightlyKey}`
+              : `${state.nightName} · ${state.night}/${state.nightCount}`}
           </span>
           <span className="value">
             Wave {state.wave} / {state.waveCount}
@@ -459,8 +504,28 @@ export function Hud({
       {state.phase === 'briefing' && (
         <div className="veil">
           <div className="sheet">
+            <div className="modes">
+              <button
+                type="button"
+                className={`mode ${state.mode === 'campaign' ? 'on' : ''}`}
+                onClick={() => onSetMode('campaign')}
+              >
+                The Seven Nights
+              </button>
+              <button
+                type="button"
+                className={`mode ${state.mode === 'nightly' ? 'on' : ''}`}
+                onClick={() => onSetMode('nightly')}
+              >
+                The Nightly Road
+                {state.streak > 0 && <span className="streak">{state.streak}</span>}
+              </button>
+            </div>
+
             <p className="eyebrow">
-              Ghost Road · {state.nightName} · {state.night} of {state.nightCount}
+              {state.mode === 'nightly'
+                ? `Ghost Road · ${state.nightlyKey}`
+                : `Ghost Road · ${state.nightName} · ${state.night} of ${state.nightCount}`}
             </p>
             <h1>{state.nightLede}</h1>
             <p className="lede">{state.nightTeaches}</p>
@@ -472,11 +537,29 @@ export function Hud({
             ) : (
               <p className="footnote sheet-note">Press ? at any time for the full rules.</p>
             )}
-            <ToyPicker toy={state.toy} onChoose={onChooseToy} />
-            <button type="button" className="primary" onClick={onBegin}>
-              Hold the night
-            </button>
-            <p className="footnote">or press Space</p>
+            {state.mode === 'nightly' ? (
+              <NightlyBrief state={state} />
+            ) : (
+              <ToyPicker toy={state.toy} onChoose={onChooseToy} />
+            )}
+
+            {state.mode === 'nightly' && state.nightlyPlayed ? (
+              <>
+                <button type="button" className="primary" disabled>
+                  Already walked today
+                </button>
+                <p className="footnote">A new road at midnight. One attempt each.</p>
+              </>
+            ) : (
+              <>
+                <button type="button" className="primary" onClick={onBegin}>
+                  Hold the night
+                </button>
+                <p className="footnote">
+                  {state.mode === 'nightly' ? 'One attempt. No retries.' : 'or press Space'}
+                </p>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -520,7 +603,29 @@ export function Hud({
         />
       )}
 
-      {state.phase === 'failed' && (
+      {/* The Nightly Road has no retry and no next. Both curtains say so plainly and
+          send you back to the campaign, which is the thing you can still play. */}
+      {state.phase === 'failed' && state.mode === 'nightly' && (
+        <Curtain
+          title="The hollow took the homestead."
+          sub={`That was today's road. There is another one tomorrow.${state.bestStreak > 0 ? ` Best streak: ${state.bestStreak}.` : ''}`}
+          action="Back to the seven nights"
+          hint="or press R"
+          onAction={onRestart}
+        />
+      )}
+
+      {state.phase === 'complete' && state.mode === 'nightly' && (
+        <Curtain
+          title="Held."
+          sub={`${state.streak} night${state.streak === 1 ? '' : 's'} in a row.${state.streak >= state.bestStreak ? ' Your best yet.' : ` Best: ${state.bestStreak}.`}`}
+          action="Back to the seven nights"
+          hint="A new road at midnight"
+          onAction={onRestart}
+        />
+      )}
+
+      {state.phase === 'failed' && state.mode === 'campaign' && (
         <Curtain
           title="The hollow took the homestead."
           sub="Kara is fine. She always is."
@@ -530,7 +635,7 @@ export function Hud({
         />
       )}
 
-      {state.phase === 'complete' && (
+      {state.phase === 'complete' && state.mode === 'campaign' && (
         <Curtain
           title={state.finalNight ? 'Seven nights. Dawn.' : 'Dawn.'}
           sub={

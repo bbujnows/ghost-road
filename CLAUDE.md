@@ -16,10 +16,10 @@ Crawler, Tallow Man, Bone Dog, The Unseen) · ward upgrade branches · **all sev
 bosses on 3/5/7, per-night fog and wind, and `localStorage` progress · lamp oil, homestead HP,
 Normal-mode retry.
 
-The toy loadout ships with four of the doc's eight toys, including Hold on the Rope.
+The toy loadout ships with four of the doc's eight toys, including Hold on the Rope. **The Nightly
+Road** is in: one seeded night per calendar day, the same for everyone, one attempt, a local streak.
 
-Next: **step 8** — the Nightly Road (one seeded night per calendar day) and the procedural Long
-Road (endless).
+Next: the second half of step 8 — **the Long Road** (endless, with a procedurally generated road).
 
 Not built: the other wards (salt, bell, spring line, bottle tree, fiddler), the Drownd Girl, Hant
 Cat, Hollow Kin, Snallygaster and Fetch, bond, stash, Hard mode, endless, audio. Do not add them
@@ -99,6 +99,7 @@ src/game/
   Game.ts       orchestrator — waves, oil, homestead HP, input, HUD state bridge
   lighting.ts   the lightmap, the three bands, lightAt() and radiusForThreshold()
   nights.ts     the seven nights — wave tables, fog, wind, starting oil
+  nightly.ts    the date-seeded daily night, and the streak record
   toys.ts       the toy roster, and Loadout — every Kara stat a toy can change
   enemies.ts    Enemy and Boss base classes + the whole roster + Corpse
   wards.ts      Lantern (pure light, snuffable) and ColdIron (damage, only in light)
@@ -198,6 +199,14 @@ native binary downloaded corrupt. Fix with `npm install lightningcss-win32-x64-m
   Reading `BUBBLES.maxCharges` where the Sock Monkey is meant to apply is a bug that stays invisible
   until someone wonders why a toy does nothing. `loadoutFor()` resolves the toy to plain numbers
   once, at the start of a night.
+- **`nightly.ts` must stay deterministic in its date key.** Nothing in the generator may read
+  `Math.random()` or `Date.now()` — the same key has to produce the same night on every machine, and
+  a single stray call makes the daily uncomparable in a way no test will notice.
+- **To run repo TypeScript under Node** (for tuning scripts), bundle it first:
+  `npx esbuild src/game/x.ts --bundle --format=esm --platform=node --outfile=<tmp>.mjs`. Node's
+  `--experimental-strip-types` handles type-only imports but will not resolve this repo's
+  extensionless relative imports. Do not scrape the source with regex to get at tuning tables — that
+  silently merged wave groups twice and reported a night as negative length.
 - **Do not rewrite source files through PowerShell `Get-Content`/`Set-Content`.** Windows PowerShell
   5.1 reads as ANSI and writes UTF-8-with-BOM, which turns every box-drawing character in this
   repo's comment banners into mojibake. Use the Edit tool.

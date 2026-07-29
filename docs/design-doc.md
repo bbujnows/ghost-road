@@ -602,6 +602,45 @@ nights to grow.
 Night 6 is the payoff for §2.4. A player who has spent five nights tracking her by her paws will
 find the real Kara in about a second and a half, and will feel clever rather than tested.
 
+> The table above is the **original** structure. What shipped is in "The seven nights, as built"
+> above: bosses on 3/5/7 per the consult, and three of these bosses blocked on systems that do not
+> exist. It is kept because Night 6's Fetch and Night 4's Drownd Girl are still the designs to build
+> when their systems land.
+
+### 6.1 The Nightly Road (built 2026-07-28)
+
+Consult §7.2. **One seeded night per calendar day, the same for everyone, one attempt, a local
+streak.** The seed is the date, so the night is not random — it is *fixed*, which is the whole
+point. Nothing in the generator reads `Math.random()`.
+
+Each day draws two support enemy types, a boss on roughly one day in three, a fog level, wind on
+roughly one day in three, and **a single fixed toy that everybody gets** — the loadout is part of
+the day's puzzle rather than a lever the player pulls.
+
+**The wave shape is fixed and only the composition varies.** A daily whose length swings by two
+minutes is not a ritual; it is a coin flip. Measured across 365 generated nights: **3:19–4:08**,
+46–49 bodies, none over the five-minute budget.
+
+**Fairness is the design problem a daily has that a campaign does not.** A campaign night is allowed
+to be hard because it is Night 7. A daily that happens to roll heavy fog, wind *and* a boss is not
+hard — it is a day the player lost to the generator. Two guards:
+
+1. **The draw is scored, and starting oil pays for it.** Oil ranges 95–163 across the year, tracking
+   what was drawn. A heavy night hands you the oil to answer it.
+2. **At most two heavy modifiers.** Difficulty from stacked modifiers is super-linear while the oil
+   compensation is linear, so a boss behind thick fog on a windy night gets its fog reduced. Fog is
+   the one that gives way: wind and the boss are both things a player can answer with a decision,
+   and fog is the one that just takes reach away.
+
+**The streak, and what breaks it.** A win advances it — continuing if yesterday was also held, and
+otherwise starting again at one. **A loss is the only thing that resets it to zero.** An unresolved
+attempt — a closed laptop, a crashed tab — merely fails to advance it, because losing a streak to a
+browser is not a game outcome.
+
+The attempt is marked **on the way in, not on the way out.** One attempt has to mean one attempt: a
+streak you can reload your way out of is not worth counting. The cost is real — a genuine crash
+burns the day — and it is flagged for playtest in §12.2.
+
 ---
 
 ## 7. Difficulty and failure
@@ -825,7 +864,12 @@ its **positioning**: the hook is the dog, the light is the terrain, the horror i
 5. **Is `KARA.healPerWave = 25` right, or should she heal fully between waves?** Invented in the
    counterplay pass because nothing else can heal her yet (§3.1). Full healing removes the
    consequence; none at all reintroduces a death spiral. 25 is a guess that needs a session.
-6. **Night 5's boss.** The Greenbrier Ghost is real West Virginia folklore (Zona Heaster Shue,
+6. **Is the Nightly Road's one-attempt rule too strict?** The attempt is marked on the way in, so a
+   crashed tab burns the day. That is what makes the streak worth anything, but it means the game
+   can take a day away for a reason that has nothing to do with the hollow. The alternative —
+   preserving in-progress state the way Wordle does — is more code and more places to be wrong.
+   Watch whether it ever actually bites.
+7. **Night 5's boss.** The Greenbrier Ghost is real West Virginia folklore (Zona Heaster Shue,
    1897) and is settler history rather than sacred tradition, which is why it is used here.
    Several obvious alternatives for this slot — the Raven Mocker and the Wampus Cat among them —
    are Cherokee, drawn from living religious tradition rather than ghost stories. If the game

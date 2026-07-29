@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Game } from './game/Game'
-import type { GameState } from './game/Game'
+import type { GameState, Mode } from './game/Game'
 import type { ToyId } from './game/toys'
 import { Hud } from './ui/Hud'
 import './App.css'
@@ -40,6 +40,7 @@ export default function App() {
   const buyUpgrade = useCallback((slot: number) => gameRef.current?.buyUpgrade(slot), [])
   const restartCampaign = useCallback(() => gameRef.current?.restartCampaign(), [])
   const chooseToy = useCallback((id: ToyId) => gameRef.current?.chooseToy(id), [])
+  const setMode = useCallback((m: Mode) => gameRef.current?.setMode(m), [])
 
   return (
     <div className="app">
@@ -56,6 +57,7 @@ export default function App() {
           onBuyUpgrade={buyUpgrade}
           onRestartCampaign={restartCampaign}
           onChooseToy={chooseToy}
+          onSetMode={setMode}
         />
       </div>
     </div>

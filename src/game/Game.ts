@@ -16,7 +16,17 @@ import {
   SHOW_BELLY,
   WAVE_BREAK,
 } from './balance'
-import { NIGHTS, waveSizeOf } from './nights'
+import { NIGHTS } from './nights'
+import type { NightSpec } from './nights'
+import {
+  alreadyAttempted,
+  loadRecord,
+  markAttempted,
+  nightlyFor,
+  recordHeld,
+  recordLost,
+} from './nightly'
+import type { NightlyNight } from './nightly'
 import { BRANCHES, BRANCHES_FOR } from './balance'
 import type { BranchId, EnemyKind, WardKind } from './balance'
 import { Bloom, Motes, Sparks, Weather, vignette } from './atmosphere'
@@ -38,6 +48,9 @@ export const WORLD_HEIGHT = 720
 
 export type Phase = 'briefing' | 'wave' | 'break' | 'failed' | 'complete'
 export type WardId = WardKind
+
+/** The campaign, or today's seeded night. */
+export type Mode = 'campaign' | 'nightly'
 
 /** One branch of the selected ward, as the HUD needs to draw it. */
 export interface BranchOption {
@@ -73,6 +86,14 @@ export interface GameState {
   nightTeaches: string
   /** True on the last night, so the finish screen can mean something. */
   finalNight: boolean
+  mode: Mode
+  /** §7.2, nightly only. */
+  nightlyKey: string
+  nightlyModifiers: string[]
+  /** True once today's has been attempted — there is no second go. */
+  nightlyPlayed: boolean
+  streak: number
+  bestStreak: number
   /** 0 on a clear night. */
   fog: number
   /** Seconds to the next gust, or 0 on a still night. */
@@ -174,6 +195,9 @@ export class Game {
   private homesteadHp = HOMESTEAD_MAX_HP
   private oil = NIGHTS[0].startingOil
 
+  private mode: Mode = 'campaign'
+  /** Today's seeded night. Generated once — it does not change while the tab is open. */
+  private nightly: NightlyNight = nightlyFor()
   /** §4. The toy for the coming night, chosen on the briefing. */
   private toy: ToyId = 'rope'
   /** Seconds to the next gust. 0 on a still night. */
@@ -390,6 +414,14 @@ export class Game {
   /** Leaves the briefing and starts the first wave countdown. */
   beginNight() {
     if (this.phase !== 'briefing') return
+
+    if (this.mode === 'nightly') {
+      if (alreadyAttempted(this.nightly.key)) return
+      // Marked on the way *in*. One attempt has to mean one attempt, and a streak you
+      // can reload your way out of is not worth counting.
+      markAttempted(this.nightly.key)
+    }
+
     this.phase = 'break'
     this.breakTimer = 4
   }
@@ -449,7 +481,8 @@ export class Game {
 
   /** §4. Chosen on the briefing screen; takes effect when the night starts. */
   chooseToy(toy: ToyId) {
-    if (this.phase !== 'briefing') return
+    // Not on the Nightly Road: its loadout is fixed and shared.
+    if (this.phase !== 'briefing' || this.mode === 'nightly') return
     this.toy = toy
     this.kara.loadout = loadoutFor(toy)
     this.kara.hp = this.kara.loadout.maxHp
@@ -470,6 +503,13 @@ export class Game {
    * player's side it is always just "carry on".
    */
   restart() {
+    // The Nightly Road has no retry and no next — that is the whole shape of it. Both
+    // curtains send you back to the campaign, which is the thing you *can* play again.
+    if (this.mode === 'nightly') {
+      this.mode = 'campaign'
+      this.retryNight()
+      return
+    }
     if (this.phase === 'complete') this.nextNight()
     else this.retryNight()
   }
@@ -763,8 +803,20 @@ export class Game {
     }
   }
 
-  private get night() {
-    return NIGHTS[this.nightIndex]
+  private get night(): NightSpec {
+    return this.mode === 'nightly' ? this.nightly : NIGHTS[this.nightIndex]
+  }
+
+  /**
+   * Switch modes. Only from a briefing — a mode is a different night, and swapping one
+   * mid-wave would mean rebuilding the board underneath the player.
+   */
+  setMode(mode: Mode) {
+    if (this.phase !== 'briefing' || mode === this.mode) return
+    this.mode = mode
+    // Today's night may have rolled over while the tab sat open.
+    if (mode === 'nightly') this.nightly = nightlyFor()
+    this.retryNight()
   }
 
   private queueWave(index: number) {
@@ -827,7 +879,10 @@ export class Game {
     }
     this.bubbles = []
 
-    this.kara.reset(HOMESTEAD.x - 175, HOMESTEAD.y + 48, this.toy)
+    // §7.2: the Nightly Road offers a fixed loadout. Everyone gets the same toy, so it
+    // is part of the day's puzzle rather than a lever the player pulls.
+    const toy = this.mode === 'nightly' ? this.nightly.toy : this.toy
+    this.kara.reset(HOMESTEAD.x - 175, HOMESTEAD.y + 48, toy)
 
     this.homesteadHp = HOMESTEAD_MAX_HP
     this.oil = this.night.startingOil
@@ -1014,6 +1069,9 @@ export class Game {
     if (this.homesteadHp <= 0) {
       this.homesteadHp = 0
       this.phase = 'failed'
+      // Losing is the only thing that resets a streak. An unresolved attempt — a closed
+      // laptop, a crashed tab — merely fails to advance it.
+      if (this.mode === 'nightly') recordLost(this.nightly.key)
     } else if (this.phase === 'wave' && !this.spawnQueue.length && !this.enemies.length) {
       // §9 income floor: clearing a wave pays regardless of how it was cleared.
       this.oil += OIL_PER_WAVE
@@ -1023,6 +1081,7 @@ export class Game {
       this.waveIndex++
       if (this.waveIndex >= this.night.waves.length) {
         this.phase = 'complete'
+        if (this.mode === 'nightly') recordHeld(this.nightly.key)
       } else {
         this.breakTimer = WAVE_BREAK
         this.phase = 'break'
@@ -1091,9 +1150,16 @@ export class Game {
     const L = this.lighting.lightAt(this.pointer.x, this.pointer.y)
 
     const night = this.night
+    const record = loadRecord()
 
     this.stateHandler({
       phase: this.phase,
+      mode: this.mode,
+      nightlyKey: this.nightly.key,
+      nightlyModifiers: this.nightly.modifiers,
+      nightlyPlayed: record.attempted === this.nightly.key,
+      streak: record.streak,
+      bestStreak: record.best,
       night: night.n,
       nightCount: NIGHTS.length,
       nightName: night.name,
@@ -1131,7 +1197,7 @@ export class Game {
       relightIn: this.lanterns.reduce((m, l) => Math.max(m, l.relightIn), 0),
       nextWaveCount:
         this.phase === 'break' && this.waveIndex < night.waves.length
-          ? waveSizeOf(this.nightIndex, this.waveIndex)
+          ? night.waves[this.waveIndex].groups.reduce((n, g) => n + g.count, 0)
           : 0,
       lightUnderCursor: L,
       bandUnderCursor: bandOf(L),
