@@ -219,20 +219,25 @@ alpha 0.18. A preview should promise the smaller true thing, not the larger nomi
 
 ## 4. Build order
 
-| # | Work | Cost | Blocked on a session? |
-| --- | --- | --- | --- |
-| 1 | **F2** destack Night 6 | 3 numbers | No |
-| 2 | **F5** z-order | small refactor | No |
-| 3 | **F1** wind as a front | moderate | No |
-| 4 | **F4** road values | small | No |
-| 5 | **F3** Kara legibility | small | No |
-| 6 | **F6** preview honesty | trivial | No |
-| 7 | Cut list 1–2 | trivial | No |
-| 8 | The bark, and the audio mix around it | large | **Yes** |
-| 9 | A third and fourth ward (D5) | large | **Yes** |
+**All nine shipped.** Status as of 2026-07-30:
 
-Everything through 7 is buildable now and none of it needs a playtest to justify. 8 and 9 should not
-be started until someone has played the result of 1–7 with sound on.
+| # | Work | Landed in |
+| --- | --- | --- |
+| 1 | **F2** destack Night 6 | ✅ `ce39408` |
+| 2 | **F5** z-order | ✅ `ce39408` |
+| 3 | **F1** wind as a front | ✅ `ce39408` |
+| 4 | **F4** road values | ✅ `ce39408` |
+| 5 | **F3** Kara legibility | ✅ `ce39408` |
+| 6 | **F6** preview honesty | ✅ `ce39408` |
+| 7 | Cut list 1–2 | ✅ `ce39408` |
+| 8 | The bark, and the audio mix around it | ✅ `bfbe8ae` |
+| 9 | A third and fourth ward (D5) | ✅ `6b65d32` — three, not two: salt, the Bottle Tree and the Church Bell |
+
+> **The plan is executed. What is left of it is §5 — and four of those five questions are still
+> open, because only one session has been played since this document was written.** Item 8 was
+> explicitly gated on playing the result of 1–7 with sound on, and it was built before that happened.
+> That was the right call for momentum and it is a debt: the audio mix has never been heard against
+> real play, and neither has anything after it.
 
 ---
 

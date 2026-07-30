@@ -13,6 +13,7 @@ import {
   HOMESTEAD_MAX_HP,
   KARA,
   LANTERN,
+  LEAD,
   OIL_PER_DARK_KILL,
   OIL_PER_LIT_KILL,
   OIL_PER_WAVE,
@@ -222,6 +223,9 @@ export interface GameState {
   hasHold: boolean
   holdReady: boolean
   holdCooldown: number
+  /** §3.2 Lead: true only at Bond T4, on the Seventh Night, unspent. */
+  leadAvailable: boolean
+  leadRemaining: number
   /** Lanterns the Tallow Man has put out, and the longest one has left. */
   lanternsOut: number
   relightIn: number
@@ -317,6 +321,8 @@ export class Game {
   private ballWave = 0
   /** §9: feeding is once a night, or bond is just stash with extra steps. */
   private fedTonight = false
+  /** §3.2 Lead: once per night, and there is only one night it exists on. */
+  private leadUsed = false
 
   /** §7.2. Resolved from the scar count at the start of every night. */
   private scarred = scarEffects(0)
@@ -567,6 +573,8 @@ export class Game {
         this.blowBubble()
       } else if (key === 'z') {
         this.blanket()
+      } else if (key === 'l') {
+        this.useLead()
       } else if (key === 't') {
         this.throwBall()
       } else if (key === 'g') {
@@ -705,6 +713,26 @@ export class Game {
       enemy.reveal(CHURCH_BELL.reveal)
     }
     this.kara.deafen(CHURCH_BELL.deafens)
+  }
+
+  /**
+   * §3.2 **Lead.** Bond T4, the Seventh Night, once.
+   *
+   * Three gates, and each is the point. Bond, because Lead is a reward for having looked
+   * after her rather than a scheduled unlock. Night 7, because the fog it answers only
+   * exists there. Once, because a thing you can do twice is a cooldown, not a last resort.
+   */
+  useLead() {
+    if (this.inputLocked || !this.leadAvailable) return
+    if (!this.kara.lead()) return
+    this.leadUsed = true
+  }
+
+  /** True only when all three gates are open and it has not been spent. */
+  private get leadAvailable() {
+    if (this.leadUsed || this.mode !== 'campaign') return false
+    if (tierOf(this.progress.bond) < LEAD.tier) return false
+    return this.night.n >= LEAD.night
   }
 
   /** §3.2 Hold. Only exists on a night the Rope is equipped. */
@@ -1327,6 +1355,8 @@ export class Game {
       this.night.startingOil + this.progress.oilUpgrades * 25 - this.scarred.oilPenalty,
     )
     this.fedTonight = false
+    this.leadUsed = false
+    this.lighting.fogClear = null
     this.scarJustTaken = null
     this.scarBanner = 0
     // Fog is set by applyScars() above — scar 5 adds to it, so it must not be overwritten.
@@ -1877,6 +1907,8 @@ export class Game {
           affordable: !owned && this.progress.stash >= s.cost,
         }
       }),
+      leadAvailable: this.leadAvailable,
+      leadRemaining: this.kara.leadRemaining,
       hasHold: this.kara.loadout.hold,
       holdReady: this.kara.holdReady || this.kara.holding,
       holdCooldown: this.kara.holdCooldownRemaining,

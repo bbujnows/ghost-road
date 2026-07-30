@@ -140,6 +140,22 @@ export class LightingSystem {
   /** §2.2. Scales every light in the game down. Raised on the later nights. */
   fogDensity = 0
 
+  /**
+   * §3.2 Lead. A circle inside which the fog is simply not there.
+   *
+   * Applied **per light, not per sample**: a lantern whose post stands inside the circle
+   * burns at full strength everywhere its pool reaches. That is the only version that is
+   * exact in both `lightAt()` and the render — the lightmap draws one sprite per light and
+   * cannot vary fog across a single pool, so a per-sample rule would make the two disagree,
+   * which is the failure this system has been careful to avoid since the first build.
+   */
+  fogClear: { x: number; y: number; radius: number } | null = null
+
+  private clearFor(l: Light): boolean {
+    if (!this.fogClear) return false
+    return Math.hypot(l.x - this.fogClear.x, l.y - this.fogClear.y) <= this.fogClear.radius
+  }
+
   private readonly lightLayer = new Container()
   private readonly base: Graphics
   private readonly texture: RenderTexture
@@ -183,10 +199,13 @@ export class LightingSystem {
   lightAt(x: number, y: number): number {
     // Ambient is not scaled: fog does not make the dark darker, it makes lights smaller.
     let total = AMBIENT_LIGHT
-    const rs = this.fogRadiusScale
-    const is = this.fogIntensityScale
 
     for (const l of this.lights) {
+      // Lead lifts the fog off individual lamps, so the scale is per light, not global.
+      const clear = this.clearFor(l)
+      const rs = clear ? 1 : this.fogRadiusScale
+      const is = clear ? 1 : this.fogIntensityScale
+
       const dx = x - l.x
       const dy = y - l.y
       const intensity = l.intensity * is
@@ -242,7 +261,10 @@ export class LightingSystem {
       }
 
       const flicker = l.flicker ? 1 + Math.sin(this.time * 11 + i * 3.7) * l.flicker : 1
-      const rs = this.fogRadiusScale
+      // Same per-light rule as lightAt(), so the picture and the gameplay agree exactly.
+      const clear = this.clearFor(l)
+      const rs = clear ? 1 : this.fogRadiusScale
+      const is = clear ? 1 : this.fogIntensityScale
 
       s.visible = true
       s.position.set(l.x, l.y)
@@ -250,7 +272,7 @@ export class LightingSystem {
       s.height = (l.radiusY ?? l.radius) * rs * 2
       s.rotation = l.angle ?? 0
       s.tint = l.color
-      s.alpha = Math.max(0, Math.min(1, l.intensity * flicker * this.fogIntensityScale))
+      s.alpha = Math.max(0, Math.min(1, l.intensity * flicker * is))
     }
 
     renderer.render({ container: this.lightLayer, target: this.texture, clear: true })

@@ -35,7 +35,8 @@ order — pick by what the game needs. In rough order of what it is missing most
    banked, 63% affordable, and the gap closes or widens depending on how much you use her.
 4. ~~Hard mode's scars~~ — **built 2026-07-30** (§7.2a). Campaign only; the Long Road still keeps one
    life per run because campaign and endless scars would need separate ledgers.
-5. **Lead** (bond T4) and the hose (§3.3) — the last two of Kara's specified abilities.
+5. ~~Lead~~ — **built 2026-07-30** (§3.4b). The hose (§3.3) is the last of her specified abilities and
+   is blocked on the spring line, which is blocked on detour pathfinding.
 6. **The blocked bosses** — Snallygaster (aerial pathing), Drownd Girl (salt + water + light damage),
    the Fetch. Each is one system away.
 
@@ -87,6 +88,7 @@ mechanic does not trace back to a real trait, it does not belong to her.
 | Territorial at home | **Squaring up** — she runs the Tallow Man off a lantern without a sound | ✅ |
 | Has never lost a game of tug | **Hold** — plants herself; nothing within 90px gets past. Needs the Rope toy | ✅ |
 | Loves stuffed toys | **Toy Loadout** — one per night, four built of eight | ✅ |
+| Knows the way home in the dark | **Lead** — the fog lifts where she walks. Bond T4, Night 7, once | ✅ |
 | Silent except territorial at home | **The Bark** — silent all game; one bark means something reached the porch. Once per night, maximum. | ❌ |
 | Attacks water from a hose | **The Spring Line** — running-water ward (real folklore: spirits can't cross it); she amplifies it and is healed by it | ❌ |
 | Loves balls | **The Ball Stash** — retrieval hoard under the porch, between-night currency | ❌ |

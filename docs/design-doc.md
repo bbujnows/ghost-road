@@ -305,8 +305,32 @@ at Night 7 — the intended shape.
 consult (§6) caught the exploit before it existed: retrying a failed night keeps stash but must not
 keep bond, or deliberate failure becomes a bond farm — throw the ball, walk into the porch, repeat.
 
-**Lead (T4) is not built.** It needs fog manipulation on Night 7, and it is the one tier that gates a
-nameable ability rather than a quality of the dog.
+### 3.4b Lead, as built (2026-07-30)
+
+`L`, once, Bond T4, Night 7 only. Three gates and each is the point: **bond** because Lead is a
+reward for having looked after her rather than a scheduled unlock, **Night 7** because the fog it
+answers only exists there, and **once** because a thing you can do twice is a cooldown, not a last
+resort.
+
+**Implemented per light, not per sample.** A lantern whose post stands inside her 300px circle burns
+as though the night were clear. That is the only version exact in *both* `lightAt()` and the render —
+the lightmap draws one sprite per light and cannot vary fog across a single pool, so a per-sample
+rule would make the picture and the gameplay disagree, which is the failure this system has avoided
+since the first build.
+
+| Night | Fog | Lit reach | With Lead | |
+| --- | --- | --- | --- | --- |
+| 5 | 0.50 | 73px | 102px | +40% |
+| 6 | 0.35 | 82px | 102px | +25% |
+| **7** | 0.80 | **56px** | **102px** | **+83%** |
+| 7, five scars | 0.95 | 47px | 102px | +116% |
+
+Twelve seconds, covering roughly 56% of the road if she stands in the middle of it — and a walker
+crosses 360px in that time. **She does not fight the Drover. She makes it possible to.**
+
+Measured against the bond curve (§3.4a), only near-perfect play reaches T4: 100 for a player who
+throws the ball, keeps her unhurt and feeds her; 76 for merely decent play. So Lead exists for people
+who looked after her, which is exactly what §3.4 says it is for.
 
 **The ball and fetching are the same currency, and it is not oil.** Both cost *her being somewhere
 else*. That is the whole design of this layer: progression is bought with presence, and a player who

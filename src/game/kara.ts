@@ -1,5 +1,5 @@
 import { Container, Graphics } from 'pixi.js'
-import { BLANKET, BUBBLES, HOLD, KARA, KARA_WALK_SPEED, SHOW_BELLY } from './balance'
+import { BLANKET, BUBBLES, HOLD, KARA, KARA_WALK_SPEED, LEAD, SHOW_BELLY } from './balance'
 import type { LightingSystem } from './lighting'
 import { loadoutFor } from './toys'
 import type { Loadout, ToyId } from './toys'
@@ -703,6 +703,26 @@ export class Kara {
   private deafFor = 0
 
   /**
+   * §3.2 **Lead.** The last thing she learns, and the only ability gated behind having
+   * actually looked after her.
+   *
+   * She walks ahead and the fog is not there where she is. She does not fight the Drover;
+   * she makes it possible to. The Game owns the gating — Bond T4, Night 7, once — because
+   * she has no idea what night it is.
+   */
+  lead(): boolean {
+    if (this.mode !== 'free') return false
+    this.leading = LEAD.duration
+    return true
+  }
+
+  get leadRemaining() {
+    return Math.max(0, this.leading)
+  }
+
+  private leading = 0
+
+  /**
    * §3.2 Hold, granted by the Rope (§4). She plants herself and nothing gets past. `H`
    * again lets go early, which matters — the full 8 seconds costs her half her health,
    * and a player who cannot stop paying will simply never press it.
@@ -800,6 +820,8 @@ export class Kara {
     this.ignoredBall = false
     this.finishedErrand = null
     this.wentDown = false
+    this.leading = 0
+    this.deafFor = 0
     this.under = 0
     this.downTimer = 0
     this.underTimer = 0
@@ -833,6 +855,10 @@ export class Kara {
   update(dt: number, lighting: LightingSystem, threats: Threat[] = []) {
     this.dt = dt
     let moving = false
+
+    // §3.2 Lead. The clear air travels with her, so it is written every frame she has it.
+    this.leading = Math.max(0, this.leading - dt)
+    lighting.fogClear = this.leading > 0 ? { x: this.x, y: this.y, radius: LEAD.radius } : null
 
     this.bellyCooldown = Math.max(0, this.bellyCooldown - dt)
     this.charges = Math.min(

@@ -674,6 +674,28 @@ export const HOLD = {
   strain: 6,
 } as const
 
+/**
+ * §3.2 **Lead.** The last thing she learns, and the only ability in the game gated behind
+ * having actually looked after her: Bond T4, Night 7 only, once.
+ *
+ * "Fog → 0 within 300px of her for 12s." Implemented per *light* rather than per sample —
+ * any lantern whose post stands inside her circle burns at full strength as though the
+ * night were clear. That is exact in both the gameplay evaluation and the render, which a
+ * per-sample version would not be: the lightmap draws one sprite per light and cannot vary
+ * fog across a single pool.
+ *
+ * Night 7 runs at fog 0.8, where a lantern's lit reach falls from 102px to 56px. Inside
+ * her lead it is 102px again. She does not fight the Drover — she makes it possible to.
+ */
+export const LEAD = {
+  radius: 300,
+  duration: 12,
+  /** The night the doc reserves it for. */
+  night: 7,
+  /** §3.4 tier that unlocks it. */
+  tier: 4,
+} as const
+
 /** §3.1. Rises to 350 at Bond T1, which is not built yet. */
 export const EAR_PERK_RADIUS = 280
 /** §3.2. She tells you this long before the threat becomes visible. */

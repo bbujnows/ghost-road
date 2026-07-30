@@ -72,7 +72,7 @@ export const TIERS = [
   { at: 15, name: 'She listens further', effect: 'Ear-Perk 280 → 350px' },
   { at: 35, name: 'She rolls sooner', effect: 'Show Belly 14s → 11s' },
   { at: 60, name: 'She gets up faster', effect: 'Down 25s → 12s' },
-  { at: 85, name: 'Lead', effect: 'Night 7 only — not built' },
+  { at: 85, name: 'Lead', effect: 'L on the Seventh Night — the fog lifts where she walks' },
 ] as const
 
 export function tierOf(bond: number): number {

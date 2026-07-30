@@ -28,6 +28,7 @@ const CONTROLS = [
   { key: 'Z', label: 'Under the blanket' },
   { key: 'T', label: 'Throw the ball she dropped' },
   { key: 'G', label: 'Fetching on / off' },
+  { key: 'L', label: 'Lead — Seventh Night only' },
   { key: 'F', label: 'Fast-forward' },
   { key: 'Space', label: 'Pause' },
   { key: '?', label: 'Help' },
@@ -104,6 +105,18 @@ function KaraPanel({
           ))}
         </span>
       </div>
+
+      {/* §3.2 Lead. Only ever shown on the one night it exists, to a player who earned it —
+          so its appearance in the panel is itself the reward landing. */}
+      {(state.leadAvailable || state.leadRemaining > 0) && (
+        <div className={`ability ${state.leadRemaining > 0 ? 'cooling' : 'ready'}`}>
+          <kbd>L</kbd>
+          <span className="ability-name">Lead</span>
+          <span className="ability-state">
+            {state.leadRemaining > 0 ? `${Math.ceil(state.leadRemaining)}s` : 'once'}
+          </span>
+        </div>
+      )}
 
       {state.hasHold && (
         <div className={`ability ${state.holdReady ? 'ready' : 'cooling'}`}>
