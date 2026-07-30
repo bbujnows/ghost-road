@@ -622,7 +622,21 @@ any instant with Space; auto-pauses on tab blur; state saves to `localStorage` a
 | **Greenbrier Ghost** *(boss, N5)* | 220 | 26 px/s | 10 | — | ✅ |
 | **The Drover** *(boss, N7)* | 400 | 18 px/s | 40 | — | ✅ |
 | **Drownd Girl** *(endless pool)* | 190 | 24 px/s | 22 | salt 100%, iron 75% | ✅ |
-| Hant Cat · Hollow Kin · Snallygaster · The Fetch | — | — | — | — | ❌ |
+| **The Fetch** *(endless pool, ×3)* | 70 | 95 px/s | 14 | — | ✅ |
+| Hant Cat · Hollow Kin · Snallygaster | — | — | — | — | ❌ |
+
+**The Fetch, built 2026-07-30 — this is §2.4 being cashed.** Three copies of Kara at exactly her
+walking speed, and no white on any of them. A player who has spent five nights tracking her by four
+pale paws in the dark finds the real one in about a second and a half and feels clever; a player who
+never learned the rule is in real trouble.
+
+It builds **her actual rig** — `createRig('coat')`, never `'markings'` — rather than a lookalike. A
+hand-drawn copy would differ by a few pixels somewhere, and the player would learn to spot *that*
+instead of the paws, which would quietly destroy the rule the whole art direction is built on. Her
+speed is likewise exact: anything else would be a tell that is not the paws.
+
+Its ears are down and it does not wag. Individually they are weak — 70 HP each. **The threat was
+never the fight; it is the fifth of a second you spend looking at the wrong dog.**
 
 **The Drownd Girl, unblocked 2026-07-30.** She waited three weeks because her entire identity needed
 three systems that did not exist: salt to be immune to, running water to be stopped by, and a

@@ -220,6 +220,20 @@ function makeLeg(mode: 'coat' | 'markings', far: boolean, hip: { x: number; y: n
   return { root, knee }
 }
 
+/**
+ * ⚠ **Exported for the Fetch, and for nothing else.**
+ *
+ * §6's Fetch is "a copy of Kara. Same silhouette, same gait — **but no white markings.**"
+ * That only works if it is literally the same rig: a hand-drawn lookalike would differ by a
+ * few pixels somewhere, and the player would learn to spot *that* instead of the paws,
+ * which would quietly destroy §2.4 — the rule the whole art direction is built on.
+ *
+ * So the Fetch builds `createRig('coat')` and never `'markings'`, and the tell is exactly
+ * the thing the design says it is.
+ */
+export { createRig, poseRig, SCALE as KARA_SCALE }
+export type { Rig, Pose }
+
 function createRig(mode: 'coat' | 'markings'): Rig {
   const root = new Container()
   root.scale.set(SCALE)

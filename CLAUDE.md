@@ -36,11 +36,14 @@ order — pick by what the game needs. In rough order of what it is missing most
    life per run because campaign and endless scars would need separate ledgers.
 5. ~~Lead~~ — **built 2026-07-30** (§3.4b). The hose (§3.3) is the last of her specified abilities and
    is blocked on the spring line, which is blocked on detour pathfinding.
-6. **The blocked bosses** — the **Drownd Girl shipped 2026-07-30** into the endless and daily pools
-   once salt, water and light damage all existed. Left: the **Snallygaster** (needs aerial pathing —
-   everything follows the road polyline or steers for the homestead) and **the Fetch** (needs
-   nothing; deferred by the consult). Also unbuilt: the Hant Cat and Hollow Kin, which were never
-   scheduled.
+6. ~~The blocked bosses~~ — the **Drownd Girl and the Fetch both shipped 2026-07-30** into the
+   endless and daily pools. Only the **Snallygaster** is left, and it needs aerial pathing:
+   everything on the board follows the road polyline or steers for the homestead, and nothing flies.
+   The Hant Cat and Hollow Kin were never scheduled.
+
+**Everything the design doc specifies is now built except the Snallygaster, the Hant Cat, the Hollow
+Kin, and four of the eight toys** — and those four are each blocked on a system the doc itself
+defers. The next work is not more content. It is playing what is here.
 
 **Four toys are blocked, not cut** — Ragged Fox needs bond, Tennis Ball needs the ball drop and
 stash, the Squeaker needs the bark, the Stuffed Duck needs the spring line. Shipping a toy whose
@@ -212,6 +215,10 @@ native binary downloaded corrupt. Fix with `npm install lightningcss-win32-x64-m
 - **`as const` infers literal types.** `private charges = BUBBLES.maxCharges` is typed `2`, not
   `number`, and any assignment fails. Annotate `: number` on fields initialised from a balance
   constant.
+- **The Fetch uses Kara's actual rig, and must keep doing so.** `createRig`/`poseRig` are exported
+  from `kara.ts` for that one caller. A hand-drawn lookalike would differ somewhere and players would
+  learn to spot the difference instead of the white paws, which is §2.4 and the reason the art
+  direction exists. Its speed must also stay equal to `KARA_WALK_SPEED`.
 - **Detours move a perpendicular offset, never the path parameter.** `Enemy.lateral` bulges around a
   barrier while `t` advances normally, because `pathT` is load-bearing in four places (Hold's clamp,
   boss raising, Ear-Perk projection, `arrived`). Anything that moves an enemy off its `t` breaks all

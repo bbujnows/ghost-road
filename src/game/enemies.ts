@@ -10,6 +10,7 @@ import {
   DEATH_DURATION,
   DROVER,
   DROWND_GIRL,
+  FETCH,
   GREENBRIER,
   PORCH_DAMAGE,
   ROAD_WALKER,
@@ -19,6 +20,7 @@ import {
 import type { DamageType, EnemyKind } from './balance'
 import { damageMultiplier } from './lighting'
 import type { Light, LightingSystem } from './lighting'
+import { createRig, poseRig } from './kara'
 import { HOMESTEAD, ROAD } from './world'
 import type { Vec2 } from './world'
 
@@ -37,8 +39,14 @@ import type { Vec2 } from './world'
  *    by recalling her, or best of all by walking her over your iron and letting the
  *    strip do it.
  *
- * The Unseen, Drownd Girl, Hant Cat, Hollow Kin and the Fetch are specced (design doc
- * §6) and not built. Build order is consult §9.
+ *  - **The Unseen** — punishes trusting your eyes. Answered by Kara's ears, or by the bell.
+ *  - **Drownd Girl** — punishes a board built only of lanterns and iron. Salt does nothing
+ *    and iron does a quarter; the Bottle Tree's light is the answer.
+ *  - **The Fetch** — punishes never having learned §2.4. Three copies of Kara and no white
+ *    on any of them.
+ *
+ * Only the **Hant Cat** and **Hollow Kin** remain unbuilt, and neither was ever scheduled.
+ * The **Snallygaster** needs aerial pathing, which nothing here has.
  */
 
 /** Structural, so nothing here has to import the ward module. `Lantern` satisfies it. */
@@ -1395,6 +1403,55 @@ export class DrowndGirl extends Boss {
   }
 }
 
+/**
+ * The Fetch. Her shape, her gait, her speed, and no white on it anywhere.
+ *
+ * **This is §2.4 being cashed.** Five nights of tracking her by four pale paws in the dark,
+ * and then three dogs on the road at once. A player who learned the rule finds her in about
+ * a second and a half and feels clever; a player who never did is in real trouble.
+ *
+ * It builds **her actual rig** rather than a lookalike — `createRig('coat')`, never
+ * `'markings'`. A hand-drawn copy would differ somewhere and the player would learn to spot
+ * that instead of the paws, which would quietly destroy the rule the whole art direction is
+ * built on.
+ *
+ * They are individually weak. The threat was never the fight; it is the fifth of a second
+ * you spend looking at the wrong dog.
+ */
+export class Fetch extends Boss {
+  readonly kind = 'fetch' as const
+
+  private rig = createRig('coat')
+  private walk = Math.random() * Math.PI * 2
+  private breath = Math.random() * Math.PI * 2
+
+  constructor() {
+    super({ hp: FETCH.hp, speed: FETCH.speed, porchDamage: PORCH_DAMAGE.fetch })
+    this.drift = 7
+    // No shadow ellipse of its own: her rig draws its own ground contact, and a second one
+    // underneath would be the tell.
+    this.frame.addChild(this.rig.root)
+  }
+
+  protected animate(dt: number) {
+    this.walk += dt * 9
+    this.breath += dt * 1.6
+
+    // Her pose function, her numbers. Nothing here is a Fetch-specific approximation.
+    poseRig(this.rig, {
+      facing: 1,
+      walk: this.walk,
+      moving: true,
+      breath: this.breath,
+      // Ears down. It is not listening for anything — there is nothing in it to listen.
+      earLift: 0,
+      // And it does not wag.
+      tailWag: 0,
+      roll: 0,
+    })
+  }
+}
+
 export function spawn(kind: EnemyKind): Enemy {
   if (kind === 'crawler') return new Crawler()
   if (kind === 'tallowMan') return new TallowMan()
@@ -1404,6 +1461,7 @@ export function spawn(kind: EnemyKind): Enemy {
   if (kind === 'greenbrier') return new Greenbrier()
   if (kind === 'drover') return new Drover()
   if (kind === 'drownd') return new DrowndGirl()
+  if (kind === 'fetch') return new Fetch()
   return new RoadWalker()
 }
 

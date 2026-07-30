@@ -472,6 +472,7 @@ export const PORCH_DAMAGE = {
   greenbrier: 10,
   drover: 40,
   drownd: 22,
+  fetch: 14,
 } as const
 
 // ─── §9 The ball stash economy ──────────────────────────────────────────────
@@ -670,6 +671,34 @@ export const DROWND_GIRL = {
   radius: 13,
   saltResist: 1,
   ironResist: 0.75,
+} as const
+
+/**
+ * **The Fetch.** Three of them, and one of them is not there.
+ *
+ * §6: "A copy of Kara. Same silhouette, same gait — **but no white markings.** You identify
+ * the real dog by her four pale paws." §2.4 is the rule the entire art direction was built
+ * on, and this is the night it gets cashed: a player who has spent five nights tracking her
+ * by her paws finds her in about a second and a half, and feels clever rather than tested.
+ *
+ * It uses **her actual rig**, not a lookalike — see `createRig`'s export note. A hand-drawn
+ * copy would differ somewhere and the player would learn to spot that instead.
+ *
+ * They are individually weak. The threat is not the fight, it is the fifth of a second you
+ * spend looking at the wrong dog.
+ */
+export const FETCH = {
+  hp: 70,
+  /**
+   * Her walking speed exactly — **this must stay equal to `KARA_WALK_SPEED`.** It is
+   * written as a literal only because that constant is declared further down this file;
+   * a different number here would be a tell that is not the paws, which is the one thing
+   * §2.4 cannot afford.
+   */
+  speed: 95,
+  radius: 12,
+  /** §6: three copies on the board. */
+  count: 3,
 } as const
 
 /**
@@ -886,6 +915,7 @@ export type EnemyKind =
   | 'greenbrier'
   | 'drover'
   | 'drownd'
+  | 'fetch'
 
 export interface Group {
   kind: EnemyKind

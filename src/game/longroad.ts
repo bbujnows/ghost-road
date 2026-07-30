@@ -1,3 +1,4 @@
+import { FETCH } from './balance'
 import type { EnemyKind, Group } from './balance'
 import type { NightSpec } from './nights'
 
@@ -109,7 +110,10 @@ export function longRoadNight(n: number, rng: () => number): NightSpec {
     if (w > 0) groups.push(g(b, support, 2.2 / pace, 13))
     if (last && n >= 13) groups.push(g('tallowMan', 1 + Math.floor(step / 8), 8, 20))
     if (last && isBossNight(n)) {
-      groups.push(g(BOSSES[Math.floor(rng() * BOSSES.length)], 1, 0, 24))
+      const boss = BOSSES[Math.floor(rng() * BOSSES.length)]
+      // §6: the Fetch is *three* copies of Kara, not one. It is the only boss that is a
+      // crowd, because the crowd is the mechanic.
+      groups.push(g(boss, boss === 'fetch' ? FETCH.count : 1, 2.5, 24))
     }
     waves.push({ groups })
   }

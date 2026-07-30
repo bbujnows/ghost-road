@@ -1,3 +1,4 @@
+import { FETCH } from './balance'
 import type { EnemyKind, Group } from './balance'
 import type { NightSpec } from './nights'
 import { TOYS } from './toys'
@@ -66,10 +67,12 @@ const THREAT: Record<EnemyKind, number> = {
   // Salt-immune and 75% iron-resistant, so a daily that draws her is a daily that needs a
   // Bottle Tree. Priced above the other bosses for it.
   drownd: 17,
+  // Three of them, and individually weak — the threat is the confusion, not the fight.
+  fetch: 7,
 }
 
 const SUPPORT: EnemyKind[] = ['crawler', 'unseen', 'boneDog', 'tallowMan']
-const BOSSES: EnemyKind[] = ['bellWitch', 'greenbrier', 'drover', 'drownd']
+const BOSSES: EnemyKind[] = ['bellWitch', 'greenbrier', 'drover', 'drownd', 'fetch']
 const FOGS = [0, 0, 0.15, 0.3, 0.45, 0.6]
 
 const BOSS_NAME: Partial<Record<EnemyKind, string>> = {
@@ -77,6 +80,7 @@ const BOSS_NAME: Partial<Record<EnemyKind, string>> = {
   greenbrier: 'the Greenbrier Ghost',
   drover: 'the Drover',
   drownd: 'the Drownd Girl',
+  fetch: 'the Fetch',
 }
 
 const KIND_NAME: Partial<Record<EnemyKind, string>> = {
@@ -123,7 +127,10 @@ export function nightlyFor(key = dateKey()): NightlyNight {
         g('walker', 8, 3.4),
         g(a, 5, 1.3, 8),
         g(b, 5, 2.2, 16),
-        ...(boss ? [g(boss, 1, 0, 30)] : [g(a, 4, 1.5, 30)]),
+        // §6: the Fetch is three copies of Kara, not one — the crowd is the mechanic.
+        ...(boss
+          ? [g(boss, boss === 'fetch' ? FETCH.count : 1, 2.5, 30)]
+          : [g(a, 4, 1.5, 30)]),
       ],
     },
   ]
