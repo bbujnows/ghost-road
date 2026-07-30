@@ -50,10 +50,14 @@ import {
   FETCH_SECONDS,
   KILLS_PER_FETCH,
   MAX_OIL_UPGRADES,
+  NIGHTLY_REPAIR,
+  REPAIR,
   SALT_SACK_BONUS,
+  SCARS,
   SHOP,
   loadProgress,
   saveProgress,
+  scarEffects,
   tierOf,
 } from './progression'
 import type { Progress } from './progression'
@@ -234,6 +238,13 @@ export interface GameState {
   /** §5: null until one is built. */
   bellReady: boolean | null
   bellCooldown: number
+  /** §7.2. */
+  hard: boolean
+  /** True only before the first night of a campaign — difficulty locks after that. */
+  canChooseDifficulty: boolean
+  scars: { name: string; effect: string; taken: boolean; substituted: boolean }[]
+  /** Named the instant it happens, so the player can name it too. */
+  scarBanner: string | null
   /** Radii the player actually gets, which are not the lantern's nominal radius. */
   litRadius: number
   dimRadius: number
@@ -306,6 +317,32 @@ export class Game {
   private ballWave = 0
   /** §9: feeding is once a night, or bond is just stash with extra steps. */
   private fedTonight = false
+
+  /** §7.2. Resolved from the scar count at the start of every night. */
+  private scarred = scarEffects(0)
+  private homesteadMax = HOMESTEAD_MAX_HP
+  /** Shown once, the moment it happens. The player must be able to name it. */
+  private scarJustTaken: string | null = null
+  private scarBanner = 0
+
+  /** Hard only applies to the seven nights — the daily and endless have their own rules. */
+  private get hardCampaign() {
+    return this.progress.hard && this.mode === 'campaign'
+  }
+
+  /**
+   * §7.2. Everything the accumulated scars do, applied where each system reads it.
+   *
+   * Called at the start of a night *and* the instant a scar is taken, because a scar taken
+   * mid-night has to bite immediately — the night continues, and it continues harder.
+   */
+  private applyScars() {
+    this.scarred = scarEffects(this.hardCampaign ? this.progress.scars : 0)
+    this.homesteadMax = this.hardCampaign ? this.scarred.maxHp : HOMESTEAD_MAX_HP
+    this.lighting.fogDensity = Math.min(0.95, this.night.fog + this.scarred.extraFog)
+    if (this.scarred.bellCooldown !== null) this.bell?.setCooldown(this.scarred.bellCooldown)
+    this.kara.setDownDuration(this.scarred.downDuration)
+  }
   /** §9: stash owed but not yet carried back. She has to actually go and get it. */
   private stashOwed = 0
   private enemies: Enemy[] = []
@@ -1090,7 +1127,7 @@ export class Game {
         x,
         y,
         this.roadAngleAt(x, y),
-        this.progress.saltSack ? SALT_SACK_BONUS : 0,
+        (this.progress.saltSack ? SALT_SACK_BONUS : 0) - this.scarred.saltPenalty,
       )
       this.salts.push(salt)
       this.actors.addChild(salt.gfx)
@@ -1270,11 +1307,29 @@ export class Game {
     // §3.4: bond buys the quality of the dog, and it applies from the first spawn.
     this.kara.reset(HOMESTEAD.x - 175, HOMESTEAD.y + 48, toy, tierOf(this.progress.bond))
 
-    this.homesteadHp = HOMESTEAD_MAX_HP
-    // §9: every drum of oil bought with stash is a permanent +25, every night.
-    this.oil = this.night.startingOil + this.progress.oilUpgrades * 25
+    this.applyScars()
+
+    // §7.2. On Hard the homestead's damage persists across all seven nights and recovers
+    // +20 free between them. On Normal it is simply whole again, which is the difference
+    // between the two modes stated in one line.
+    this.homesteadHp = this.hardCampaign
+      ? Math.min(this.homesteadMax, this.progress.homesteadHp + NIGHTLY_REPAIR)
+      : this.homesteadMax
+    if (this.hardCampaign) {
+      this.progress.homesteadHp = this.homesteadHp
+      saveProgress(this.progress)
+    }
+
+    // §9: every drum of oil bought with stash is a permanent +25, every night. Scar 1
+    // takes 20 back off, permanently, which is the same shape of loss the other way.
+    this.oil = Math.max(
+      0,
+      this.night.startingOil + this.progress.oilUpgrades * 25 - this.scarred.oilPenalty,
+    )
     this.fedTonight = false
-    this.lighting.fogDensity = this.night.fog
+    this.scarJustTaken = null
+    this.scarBanner = 0
+    // Fog is set by applyScars() above — scar 5 adds to it, so it must not be overwritten.
     this.gustTimer = this.night.wind
 
     // §8. Set before the first spawn, and reset to 1 outside the Long Road so a campaign
@@ -1370,7 +1425,13 @@ export class Game {
     const item = SHOP.find((s) => s.id === id)
     if (!item || this.progress.stash < item.cost) return
 
-    if (item.id === 'feed') {
+    if (item.id === 'repair') {
+      // §7.2: repairs buy HP back. They never touch a scar — those are permanent at any
+      // price, and that is what makes the mode compound.
+      if (!this.hardCampaign || this.progress.homesteadHp >= this.homesteadMax) return
+      this.progress.homesteadHp = Math.min(this.homesteadMax, this.progress.homesteadHp + REPAIR.hp)
+      this.homesteadHp = this.progress.homesteadHp
+    } else if (item.id === 'feed') {
       if (this.fedTonight) return
       this.fedTonight = true
       this.progress.bond = Math.min(100, this.progress.bond + BOND.feed)
@@ -1391,6 +1452,19 @@ export class Game {
 
     this.progress.stash -= item.cost
     saveProgress(this.progress)
+  }
+
+  /**
+   * §7.2. Difficulty is chosen at the start of a campaign, not during one — a run that
+   * could switch modes mid-way would make its own scars meaningless.
+   */
+  setHard(hard: boolean) {
+    if (this.phase !== 'briefing' || this.nightIndex > 0 || this.progress.scars > 0) return
+    this.progress.hard = hard
+    this.progress.scars = 0
+    this.progress.homesteadHp = HOMESTEAD_MAX_HP
+    saveProgress(this.progress)
+    this.retryNight()
   }
 
   /** §9. Turning fetching off costs progression and buys presence. */
@@ -1555,19 +1629,36 @@ export class Game {
     this.corpses = this.corpses.filter((c) => !c.finished)
 
     if (this.homesteadHp <= 0) {
-      this.homesteadHp = 0
-      this.phase = 'failed'
-      // Losing is the only thing that resets a streak. An unresolved attempt — a closed
-      // laptop, a crashed tab — merely fails to advance it.
-      if (this.mode === 'nightly') recordLost(this.nightly.key)
-      // §8: the run ends here. The score is the night you did not survive, minus one.
-      if (this.mode === 'longroad') saveBest(this.runNight - 1)
+      // §7.2 Hard: the homestead does not fall. It takes a scar, refills to a new and
+      // lower maximum, and the night carries on. Losing compounds instead of resetting,
+      // which is the whole mode — and the sixth scar is the only thing that ends a run.
+      if (this.hardCampaign && this.progress.scars < SCARS.length) {
+        this.progress.scars += 1
+        this.scarJustTaken = SCARS[this.progress.scars - 1].name
+        this.scarBanner = 5
+        this.applyScars()
+        this.homesteadHp = this.homesteadMax
+        this.progress.homesteadHp = this.homesteadHp
+        saveProgress(this.progress)
+      } else {
+        this.homesteadHp = 0
+        this.phase = 'failed'
+        // Losing is the only thing that resets a streak. An unresolved attempt — a closed
+        // laptop, a crashed tab — merely fails to advance it.
+        if (this.mode === 'nightly') recordLost(this.nightly.key)
+        // §8: the run ends here. The score is the night you did not survive, minus one.
+        if (this.mode === 'longroad') saveBest(this.runNight - 1)
+        if (this.hardCampaign) this.progress.scars = SCARS.length + 1
+      }
     } else if (this.phase === 'wave' && !this.spawnQueue.length && !this.enemies.length) {
       // §9 income floor: clearing a wave pays regardless of how it was cleared.
       this.oil += OIL_PER_WAVE
       // She gets a breather too. Without this there is no way to heal her at all and a
       // bad wave 1 turns the rest of the night into a slow bleed.
       this.kara.rest(KARA.healPerWave)
+      // §7.2: on Hard the damage is carried, so it has to be recorded as it happens and
+      // not only at the end — a night abandoned mid-way must not launder its wounds.
+      if (this.hardCampaign) this.progress.homesteadHp = this.homesteadHp
       this.waveIndex++
       if (this.waveIndex >= this.night.waves.length) {
         this.phase = 'complete'
@@ -1587,6 +1678,7 @@ export class Game {
     // What Kara can hear. `soonVisible` asks where each walker will be in
     // EAR_PERK_LEAD seconds and whether the light will have reached it by then — that
     // lookahead is the whole reason her ears mean anything.
+    this.scarBanner = Math.max(0, this.scarBanner - dt)
     this.phantoms = this.phantoms.filter((p) => p.until > this.elapsed)
 
     const threats: Threat[] = this.enemies.map((w) => {
@@ -1744,7 +1836,7 @@ export class Game {
       wave: Math.min(this.waveIndex + 1, night.waves.length),
       waveCount: night.waves.length,
       homesteadHp: Math.max(0, this.homesteadHp),
-      homesteadMaxHp: HOMESTEAD_MAX_HP,
+      homesteadMaxHp: this.homesteadMax,
       oil: Math.floor(this.oil),
       selectedWard: this.selectedWard,
       canAffordSelected: this.oil >= this.wardCost(this.selectedWard),
@@ -1771,9 +1863,10 @@ export class Game {
       ballOut: this.kara.waitingOnBall,
       ballSecondsLeft: this.kara.ballSecondsLeft,
       errand: this.kara.errandKind,
-      shop: SHOP.map((s) => {
+      shop: SHOP.filter((s) => s.id !== 'repair' || this.hardCampaign).map((s) => {
         const owned =
           (s.id === 'feed' && this.fedTonight) ||
+          (s.id === 'repair' && this.progress.homesteadHp >= this.homesteadMax) ||
           (s.id === 'oil' && this.progress.oilUpgrades >= MAX_OIL_UPGRADES) ||
           (s.id === 'lamp' && this.progress.betterLamp) ||
           (s.id === 'salt' && this.progress.saltSack) ||
@@ -1809,6 +1902,15 @@ export class Game {
       })),
       bellReady: this.bell ? this.bell.ready : null,
       bellCooldown: this.bell?.cooldownRemaining ?? 0,
+      hard: this.progress.hard,
+      canChooseDifficulty: this.nightIndex === 0 && this.progress.scars === 0,
+      scars: SCARS.map((s, i) => ({
+        name: s.name,
+        effect: s.effect,
+        taken: this.hardCampaign && this.progress.scars > i,
+        substituted: s.substituted === true,
+      })),
+      scarBanner: this.scarBanner > 0 ? this.scarJustTaken : null,
       litRadius: LANTERN.radius * reachFraction(LANTERN.intensity, BAND_LIT),
       dimRadius: LANTERN.radius * reachFraction(LANTERN.intensity, BAND_DIM),
       selection: this.describeSelection(),

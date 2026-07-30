@@ -28,11 +28,22 @@ export interface Progress {
   saltSack: boolean
   /** §9. Every lantern you place is a little bigger, for good. */
   betterLamp: boolean
+  /** §7.2. Chosen once, at the start of a campaign. */
+  hard: boolean
+  /** §7.2. How many the homestead has taken. Six ends the run. */
+  scars: number
+  /** §7.2. Persists across all seven nights on Hard. Ignored on Normal. */
+  homesteadHp: number
 }
 
 /** §9 permanent upgrades, applied wherever the ward is constructed. */
 export const SALT_SACK_BONUS = 3
 export const BETTER_LAMP_BONUS = 12
+
+/** §7.2 Hard: 10 stash for 15 HP, and it never touches a scar. */
+export const REPAIR = { cost: 10, hp: 15 } as const
+/** §7.2 Hard: free, between nights. */
+export const NIGHTLY_REPAIR = 20
 
 /** §4: one toy is free so the loadout screen is never empty. */
 export const STARTING_TOYS: ToyId[] = ['rope']
@@ -44,6 +55,9 @@ const EMPTY: Progress = {
   oilUpgrades: 0,
   saltSack: false,
   betterLamp: false,
+  hard: false,
+  scars: 0,
+  homesteadHp: 100,
 }
 const KEY = 'ghost-road/progress-v2'
 
@@ -121,6 +135,8 @@ export interface StashItem {
  */
 export const SHOP: StashItem[] = [
   { id: 'feed', name: 'Feed her', detail: `Bond +${BOND.feed}. Once a night.`, cost: 4 },
+  // Hard only. Filtered out of the panel on Normal, where the homestead starts whole.
+  { id: 'repair', name: 'Patch the homestead', detail: `+${REPAIR.hp} HP. Never a scar.`, cost: REPAIR.cost },
   { id: 'oil', name: 'A drum of oil', detail: 'Permanent +25 starting oil, every night.', cost: 10 },
   {
     id: 'lamp',
@@ -147,6 +163,81 @@ export const SHOP: StashItem[] = [
  */
 export const MAX_OIL_UPGRADES = 4
 
+// ─── §7.2 Hard — *The Hollow Remembers* ─────────────────────────────────────
+
+/**
+ * Hard mode's scars.
+ *
+ * **The homestead never falls and the run never restarts.** At 0 HP it takes a permanent,
+ * named injury, refills to a new and lower maximum, and the night carries on. Losing
+ * compounds instead of resetting, which is the entire mode — by Night 7 a scarred run is a
+ * different game with fewer resources, a slower dog and a weaker bell.
+ *
+ * Scars cannot be repaired at any price. Homestead HP persists across all seven nights,
+ * recovers +20 free between them, and stash buys 15 more for 10.
+ *
+ * ⚠ **Two of the doc's five effects name systems that do not exist, and are substituted
+ * rather than shipped dead.** A scar the player cannot feel is worse than no scar: the
+ * mode's whole promise is that every one of them is nameable.
+ *
+ *  - *Burnt wing* is "−1 ward slot" in the doc. There is no ward-slot system — nothing
+ *    caps how many wards you may place — and inventing one here would rebalance Normal
+ *    too, for the sake of a difficulty mode. Substituted with a permanent oil cut, which
+ *    is the same shape of loss (you can build less) through a system that exists.
+ *  - *Split spring box* halves hose amplification, and the spring line is unbuilt
+ *    (§5.3 — it needs detour pathfinding). Substituted with the salt penalty, which is the
+ *    closest live equivalent: a ward gets meaningfully worse for the rest of the run.
+ *
+ * Restore both when their systems land.
+ */
+export interface Scar {
+  name: string
+  maxHp: number
+  /** What the player is told. It has to be nameable or the mode does not work. */
+  effect: string
+  /** True where the doc's own effect could not be honoured. */
+  substituted?: boolean
+}
+
+export const SCARS: Scar[] = [
+  {
+    name: 'Burnt wing',
+    maxHp: 85,
+    effect: 'Starting oil −20, every night for the rest of the run.',
+    substituted: true,
+  },
+  { name: 'Broken porch', maxHp: 70, effect: "Kara's Down recovery 25s → 40s." },
+  { name: 'Cracked bell frame', maxHp: 55, effect: 'Church bell cooldown 45s → 70s.' },
+  {
+    name: 'Split spring box',
+    maxHp: 40,
+    effect: 'Salt lines take 3 fewer crossings.',
+    substituted: true,
+  },
+  { name: 'Roof gone', maxHp: 25, effect: 'Fog nights lose another 15% of your light.' },
+]
+
+/** Everything the accumulated scars do, resolved once at the start of a night. */
+export interface ScarEffects {
+  maxHp: number
+  oilPenalty: number
+  downDuration: number | null
+  bellCooldown: number | null
+  saltPenalty: number
+  extraFog: number
+}
+
+export function scarEffects(scars: number): ScarEffects {
+  return {
+    maxHp: scars > 0 ? (SCARS[Math.min(scars, SCARS.length) - 1]?.maxHp ?? 25) : 100,
+    oilPenalty: scars >= 1 ? 20 : 0,
+    downDuration: scars >= 2 ? 40 : null,
+    bellCooldown: scars >= 3 ? 70 : null,
+    saltPenalty: scars >= 4 ? 3 : 0,
+    extraFog: scars >= 5 ? 0.15 : 0,
+  }
+}
+
 // ─── Persistence ────────────────────────────────────────────────────────────
 
 export function loadProgress(): Progress {
@@ -161,6 +252,9 @@ export function loadProgress(): Progress {
       oilUpgrades: clamp(p.oilUpgrades, 0, 20),
       saltSack: p.saltSack === true,
       betterLamp: p.betterLamp === true,
+      hard: p.hard === true,
+      scars: clamp(p.scars, 0, SCARS.length + 1),
+      homesteadHp: clamp(p.homesteadHp, 0, 100),
     }
   } catch {
     return { ...EMPTY, toys: [...STARTING_TOYS] }

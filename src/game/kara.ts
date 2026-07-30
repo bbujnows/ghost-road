@@ -744,7 +744,7 @@ export class Kara {
     this.wentDown = true
     this.errand = null
     this.ballOut = false
-    this.downTimer = this.loadout.downDuration
+    this.downTimer = this.scarredDown ?? this.loadout.downDuration
     this.roll = 0
     this.bellyGlow = 0
     // Two dogs can put her Down inside the 2.2s roll. If the envelope were left running
@@ -754,6 +754,17 @@ export class Kara {
     this.target = { x: HOMESTEAD.x - 60, y: HOMESTEAD.y + 40 }
     this.speed = KARA.limpSpeed
   }
+
+  /**
+   * §7.2 scar 2, "Broken porch": her Down recovery goes 25s → 40s for the rest of the run.
+   * Null restores whatever the loadout says, which is how Normal and a fresh Hard run get
+   * their number back.
+   */
+  setDownDuration(seconds: number | null) {
+    this.scarredDown = seconds
+  }
+
+  private scarredDown: number | null = null
 
   /** Between waves she gets a breather. Not from the doc — see KARA.healPerWave. */
   rest(amount: number) {

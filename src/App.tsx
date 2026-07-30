@@ -45,6 +45,7 @@ export default function App() {
   const toggleAudio = useCallback(() => void gameRef.current?.toggleAudio(), [])
   const buy = useCallback((id: string) => gameRef.current?.buy(id), [])
   const toggleFetching = useCallback(() => gameRef.current?.toggleFetching(), [])
+  const setHard = useCallback((hard: boolean) => gameRef.current?.setHard(hard), [])
 
   return (
     <div className="app">
@@ -66,6 +67,7 @@ export default function App() {
           onToggleAudio={toggleAudio}
           onBuy={buy}
           onToggleFetching={toggleFetching}
+          onSetHard={setHard}
         />
       </div>
     </div>

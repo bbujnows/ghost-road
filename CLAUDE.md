@@ -33,7 +33,8 @@ order — pick by what the game needs. In rough order of what it is missing most
    The Spring Line needs detour pathfinding and the Fiddler should land last; both are blocked
    rather than deferred. The stash shop was repriced with them (§9): 155 of sinks against ~97
    banked, 63% affordable, and the gap closes or widens depending on how much you use her.
-4. **Hard mode's scars** (§7.2). Without them a Long Road run ends on the first loss.
+4. ~~Hard mode's scars~~ — **built 2026-07-30** (§7.2a). Campaign only; the Long Road still keeps one
+   life per run because campaign and endless scars would need separate ledgers.
 5. **Lead** (bond T4) and the hose (§3.3) — the last two of Kara's specified abilities.
 6. **The blocked bosses** — Snallygaster (aerial pathing), Drownd Girl (salt + water + light damage),
    the Fetch. Each is one system away.

@@ -190,6 +190,70 @@ function ToyPicker({
 }
 
 /**
+ * §7.2. The difficulty choice, and the ledger of what the hollow has already taken.
+ *
+ * **The scars are listed before any have been taken**, greyed, in order, with what each
+ * one does. That is the consult's "add the scar preview — dread is the correct emotion and
+ * it is free". A player choosing Hard should be able to read exactly how a run degrades.
+ */
+function HardPanel({
+  state,
+  onSetHard,
+}: {
+  state: GameState
+  onSetHard: (hard: boolean) => void
+}) {
+  const taken = state.scars.filter((s) => s.taken).length
+
+  return (
+    <div className="toys">
+      <p className="eyebrow">The hollow remembers</p>
+
+      {state.canChooseDifficulty ? (
+        <div className="modes">
+          <button
+            type="button"
+            className={`mode ${state.hard ? '' : 'on'}`}
+            onClick={() => onSetHard(false)}
+          >
+            Hold the Night
+          </button>
+          <button
+            type="button"
+            className={`mode ${state.hard ? 'on' : ''}`}
+            onClick={() => onSetHard(true)}
+          >
+            The Hollow Remembers
+          </button>
+        </div>
+      ) : (
+        <p className="streak-line">
+          {state.hard ? 'The Hollow Remembers' : 'Hold the Night'}
+          <span className="sub"> — locked in for this run</span>
+        </p>
+      )}
+
+      {state.hard && (
+        <>
+          <p className="streak-line">
+            The homestead does not reset. At zero it takes a scar and the night carries on.
+            {taken > 0 && <span className="blocked"> {taken} taken.</span>}
+          </p>
+          {state.scars.map((s, i) => (
+            <div key={s.name} className={`scar ${s.taken ? 'taken' : ''}`}>
+              <span className="scar-n">{i + 1}</span>
+              <span className="scar-name">{s.name}</span>
+              <span className="scar-effect">{s.effect}</span>
+            </div>
+          ))}
+          <p className="footnote">Scars cannot be repaired at any price. The sixth ends the run.</p>
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
  * §3.4 / §9. What she has earned, and what it buys.
  *
  * Bond and stash are shown side by side deliberately: they come from the same currency —
@@ -373,6 +437,7 @@ export interface HudProps {
   onToggleAudio: () => void
   onBuy: (id: string) => void
   onToggleFetching: () => void
+  onSetHard: (hard: boolean) => void
 }
 
 /**
@@ -493,6 +558,7 @@ export function Hud({
   onToggleAudio,
   onBuy,
   onToggleFetching,
+  onSetHard,
 }: HudProps) {
   if (!state) return null
 
@@ -629,6 +695,14 @@ export function Hud({
         <KaraPanel state={state} onToggleFetching={onToggleFetching} />
       </div>
 
+      {/* §7.2. Named the instant it happens. A scar the player cannot name is just a
+          number going down, and the mode's whole promise is that they can name it. */}
+      {state.scarBanner && (
+        <div className="scar-banner">
+          The homestead takes a scar — <strong>{state.scarBanner}</strong>
+        </div>
+      )}
+
       {/* §3.5. She has dropped a ball and is looking at you, in the middle of a wave,
           which is exactly when it is least convenient. That is the design. */}
       {state.ballOut && (
@@ -705,6 +779,7 @@ export function Hud({
               <>
                 {state.mode === 'longroad' && <LongRoadBrief state={state} />}
                 <ToyPicker toy={state.toy} owned={state.ownedToys} onChoose={onChooseToy} />
+                {state.mode === 'campaign' && <HardPanel state={state} onSetHard={onSetHard} />}
                 <StashPanel state={state} onBuy={onBuy} />
               </>
             )}

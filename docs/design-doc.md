@@ -777,6 +777,34 @@ the mode.
 Bond, toys, and permanent unlocks carry across both modes identically. Difficulty changes what
 failure costs, never what Kara is capable of.
 
+### 7.2a As built (2026-07-30)
+
+Chosen on the first night's briefing and **locked once a run starts** — a run that could switch
+modes mid-way would make its own scars meaningless. The scar list is shown in full *before any have
+been taken*, greyed, with what each one does: the consult's "add the scar preview — dread is the
+correct emotion and it is free."
+
+A scar is announced by name the instant it lands. A scar the player cannot name is just a number
+going down, and the mode's whole promise is that they can name it.
+
+**Two of the five effects name systems that do not exist and are substituted rather than shipped
+dead**, because a scar the player cannot feel is worse than no scar:
+
+| # | Scar | Doc effect | As built |
+| --- | --- | --- | --- |
+| 1 | Burnt wing | −1 ward slot | **Starting oil −20, permanently.** Nothing caps how many wards you may place, and inventing a slot system here would rebalance Normal too — for the sake of a difficulty mode. The substitute is the same shape of loss (you can build less) through a system that exists. |
+| 2 | Broken porch | Down 25s → 40s | live |
+| 3 | Cracked bell frame | Bell cooldown 45s → 70s | live — the bell shipped the day before |
+| 4 | Split spring box | Hose amplification halved | **Salt lines take 3 fewer crossings.** The spring line is unbuilt (§5.3, it needs detour pathfinding). Closest live equivalent: a ward gets meaningfully worse for the rest of the run. |
+| 5 | Roof gone | Fog nights −15% light | live |
+
+Restore both when their systems land.
+
+**Hard applies to the seven nights only.** §8 wants endless to follow the difficulty the campaign was
+cleared on, but campaign scars and endless scars would have to be separate ledgers and are not — so
+the Long Road keeps its one life per run, which is already closer to Hard than to Normal. Deferred,
+not forgotten.
+
 ---
 
 ## 8. The long nights — endless mode

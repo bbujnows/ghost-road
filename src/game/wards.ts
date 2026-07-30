@@ -494,6 +494,12 @@ export class ChurchBell {
   private cooldown = 0
   private swing = 0
   private bellGfx = new Container()
+  /** §7.2 scar 3, "Cracked bell frame": 45s → 70s for the rest of the run. */
+  private period: number = CHURCH_BELL.cooldown
+
+  setCooldown(seconds: number) {
+    this.period = seconds
+  }
 
   constructor(x: number, y: number) {
     this.x = x
@@ -538,7 +544,7 @@ export class ChurchBell {
   /** Returns false if it is still cooling. */
   ring(): boolean {
     if (!this.ready) return false
-    this.cooldown = CHURCH_BELL.cooldown
+    this.cooldown = this.period
     this.swing = 1
     return true
   }
