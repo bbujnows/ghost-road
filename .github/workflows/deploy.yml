@@ -1,0 +1,56 @@
+# Build the game and publish it to GitHub Pages on every push to main.
+#
+# Nothing is committed to a gh-pages branch — this uses the Pages "GitHub Actions" source,
+# which uploads the built `dist/` directly. That keeps the repo free of build output.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # So you can redeploy from the Actions tab without making a commit.
+  workflow_dispatch:
+
+# The token needs to be allowed to publish Pages; `id-token` is required by deploy-pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# If you push twice quickly, let the second one finish rather than cancelling it midway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` rather than `install`: it installs exactly the lockfile, so a build that
+      # works here works there.
+      - run: npm ci
+
+      # The same two gates used locally. A red build should never reach the site.
+      - run: npm run lint
+      - run: npm run build
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
