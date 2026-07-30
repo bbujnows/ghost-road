@@ -63,16 +63,20 @@ const THREAT: Record<EnemyKind, number> = {
   bellWitch: 14,
   greenbrier: 14,
   drover: 20,
+  // Salt-immune and 75% iron-resistant, so a daily that draws her is a daily that needs a
+  // Bottle Tree. Priced above the other bosses for it.
+  drownd: 17,
 }
 
 const SUPPORT: EnemyKind[] = ['crawler', 'unseen', 'boneDog', 'tallowMan']
-const BOSSES: EnemyKind[] = ['bellWitch', 'greenbrier', 'drover']
+const BOSSES: EnemyKind[] = ['bellWitch', 'greenbrier', 'drover', 'drownd']
 const FOGS = [0, 0, 0.15, 0.3, 0.45, 0.6]
 
 const BOSS_NAME: Partial<Record<EnemyKind, string>> = {
   bellWitch: 'the Bell Witch',
   greenbrier: 'the Greenbrier Ghost',
   drover: 'the Drover',
+  drownd: 'the Drownd Girl',
 }
 
 const KIND_NAME: Partial<Record<EnemyKind, string>> = {

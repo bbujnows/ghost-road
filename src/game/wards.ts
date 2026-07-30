@@ -5,13 +5,15 @@ import {
   CHURCH_BELL,
   COLD_IRON,
   DARK_CAPABLE,
+  FIDDLER,
+  FIDDLER_BASE,
   IRON_BASE,
   LANTERN,
   LANTERN_BASE,
   SALT,
   SPRING,
 } from './balance'
-import type { BranchId, IronTier, LanternTier } from './balance'
+import type { BranchId, FiddlerTier, IronTier, LanternTier } from './balance'
 import type { Light, LightingSystem } from './lighting'
 import type { Enemy } from './enemies'
 
@@ -353,7 +355,7 @@ export class SaltLine {
    * Charges anything that steps over it, once. `crossed` is what makes it a *line* rather
    * than a strip: standing on salt costs nothing, crossing it costs everything.
    */
-  update(enemies: Enemy[], lighting: LightingSystem): { x: number; y: number }[] {
+  update(enemies: Enemy[], lighting: LightingSystem, boost = 1): { x: number; y: number }[] {
     if (this.spent) return []
 
     const hits: { x: number; y: number }[] = []
@@ -366,7 +368,7 @@ export class SaltLine {
       if (this.crossed.has(e)) continue
       this.crossed.add(e)
 
-      if (e.applyDamage(SALT.damage, 'salt', lighting, DARK_CAPABLE) > 0) {
+      if (e.applyDamage(SALT.damage * boost, 'salt', lighting, DARK_CAPABLE) > 0) {
         e.slowUntil = SALT.slowFor
         e.slowStrength = SALT.slow
         hits.push({ x: e.x, y: e.y })
@@ -431,7 +433,7 @@ export class BottleTree {
     return this.bottles.filter((b) => b.holding).length
   }
 
-  update(dt: number, enemies: Enemy[], lighting: LightingSystem): { x: number; y: number }[] {
+  update(dt: number, enemies: Enemy[], lighting: LightingSystem, boost = 1): { x: number; y: number }[] {
     const released: { x: number; y: number }[] = []
 
     for (const bottle of this.bottles) {
@@ -447,7 +449,7 @@ export class BottleTree {
         bottle.timer = BOTTLE_TREE.recharge
         caught.bottled = false
         // Light, so a Tallow Man shrugs half of it off. That is the counterplay working.
-        if (caught.applyDamage(BOTTLE_TREE.damage, 'light', lighting) > 0) {
+        if (caught.applyDamage(BOTTLE_TREE.damage * boost, 'light', lighting) > 0) {
           released.push({ x: caught.x, y: caught.y })
         }
         continue
@@ -591,6 +593,121 @@ export class SpringLine {
           alpha: 0.4,
         })
       }
+    }
+  }
+}
+
+/**
+ * The Fiddler. A man on the porch who plays while the hollow comes down the road.
+ *
+ * He is the only ward that makes other wards better rather than doing anything himself,
+ * which is why he was built last: a multiplier is only a choice once there is a roster
+ * worth multiplying.
+ *
+ * **He flees.** Anything within 120px and the music stops. He is not a tower, he is a man,
+ * and the aura is worth what it is worth precisely because he cannot be left out in front —
+ * the best place for the music is never the best place for him.
+ */
+export class Fiddler {
+  readonly gfx = new Container()
+  readonly x: number
+  readonly y: number
+
+  readonly upgrades = new Upgradable()
+  private stats: Omit<FiddlerTier, 'cost' | 'note'> = { ...FIDDLER_BASE }
+
+  private body = new Container()
+  private bowArm = new Container()
+  private ring = new Graphics()
+  private t = Math.random() * 6
+  /** 1 playing, 0 gone. Eased, so the music does not snap off. */
+  private playing = 1
+  private clearFor = 0
+
+  constructor(x: number, y: number) {
+    this.x = x
+    this.y = y
+
+    const g = new Graphics()
+    g.ellipse(0, 1, 9, 3).fill({ color: 0x000000, alpha: 0.3 })
+    // A stool, and a man hunched over the instrument.
+    g.rect(-7, -8, 3, 8).fill(0x3d3128)
+    g.rect(4, -8, 3, 8).fill(0x3d3128)
+    g.rect(-9, -11, 18, 3.5).fill(0x4a3d30)
+    g.moveTo(-7, -11).quadraticCurveTo(-8, -26, -3, -30).lineTo(5, -30).quadraticCurveTo(9, -25, 7, -11).fill(0x5a4636)
+    g.circle(1, -35, 6).fill(0x8a6b4e)
+    // Hat brim, because everyone in this hollow has one.
+    g.moveTo(-8, -37).quadraticCurveTo(1, -41, 10, -37).quadraticCurveTo(1, -34, -8, -37).fill(0x3d3128)
+    // The fiddle, tucked under the chin.
+    g.ellipse(9, -27, 5, 3.4).fill(0x7a3f26)
+    g.moveTo(13, -28).lineTo(21, -30).stroke({ width: 1.2, color: 0x4a3d30 })
+
+    this.bowArm.position.set(9, -27)
+    this.bowArm.addChild(
+      new Graphics().moveTo(-9, 0).lineTo(11, -3).stroke({ width: 1.4, color: 0xd8c9a8 }),
+    )
+
+    this.body.addChild(g, this.bowArm)
+    this.gfx.addChild(this.ring, this.body)
+    this.gfx.position.set(x, y)
+  }
+
+  get radius() {
+    return this.stats.radius
+  }
+
+  /** 1 when he is not playing, so callers can multiply unconditionally. */
+  get boost() {
+    return 1 + (this.stats.boost - 1) * this.playing
+  }
+
+  get karaSpeed() {
+    return 1 + (this.stats.karaSpeed - 1) * this.playing
+  }
+
+  get scared() {
+    return this.playing < 0.5
+  }
+
+  contains(px: number, py: number): boolean {
+    return Math.hypot(px - this.x, py - (this.y - 24)) < 28
+  }
+
+  upgrade(id: BranchId): number {
+    const tier = this.upgrades.take(id) as FiddlerTier | null
+    if (!tier) return 0
+    this.stats = { radius: tier.radius, boost: tier.boost, karaSpeed: tier.karaSpeed }
+    return tier.cost
+  }
+
+  /** `threat` is the distance to the nearest enemy. */
+  update(dt: number, threat: number) {
+    this.t += dt
+
+    if (threat < FIDDLER.fleeRadius) this.clearFor = 0
+    else this.clearFor += dt
+
+    // Stops dead, starts again slowly. A man who has just been frightened does not pick
+    // straight back up where he left off.
+    const wants = this.clearFor >= FIDDLER.settle ? 1 : 0
+    this.playing += (wants - this.playing) * Math.min(1, dt * (wants ? 1.2 : 9))
+
+    // Bowing, and a shoulder that moves with it.
+    this.bowArm.rotation = Math.sin(this.t * 7) * 0.34 * this.playing
+    this.body.rotation = Math.sin(this.t * 3.5) * 0.03 * this.playing
+    this.body.position.y = this.playing < 0.5 ? (1 - this.playing) * 6 : 0
+    this.body.alpha = 0.35 + 0.65 * this.playing
+
+    // The music, drawn as it travels: rings going out, fading as they go.
+    const g = this.ring.clear()
+    if (this.playing <= 0.02) return
+    for (let i = 0; i < 3; i++) {
+      const phase = (this.t * 0.4 + i / 3) % 1
+      g.circle(0, -20, this.stats.radius * phase).stroke({
+        width: 1,
+        color: 0xd8c78a,
+        alpha: 0.13 * (1 - phase) * this.playing,
+      })
     }
   }
 }
@@ -783,7 +900,7 @@ export class ColdIron {
   }
 
   /** Returns the positions of everything it bit this tick, for the ember burst. */
-  update(dt: number, enemies: Enemy[], lighting: LightingSystem): { x: number; y: number }[] {
+  update(dt: number, enemies: Enemy[], lighting: LightingSystem, boost = 1): { x: number; y: number }[] {
     this.cooldown -= dt
     this.glints.clear()
 
@@ -802,7 +919,7 @@ export class ColdIron {
     for (const w of enemies) {
       if (!this.contains(w.x, w.y)) continue
       // Iron, specifically — the counterplay matrix is built on the type, not the ward.
-      if (w.applyDamage(this.stats.tickDamage, 'iron', lighting, this.stats.threshold) > 0) {
+      if (w.applyDamage(this.stats.tickDamage * boost, 'iron', lighting, this.stats.threshold) > 0) {
         hits.push({ x: w.x, y: w.y })
         // The nails glint where they bite.
         const lx = (Math.random() - 0.5) * this.stats.length * 0.8

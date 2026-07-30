@@ -502,9 +502,29 @@ around the water and rejoin, and every other system still sees them on the road.
 So the decision is *where*: on the road it is a chokepoint everything crawls through, beside it a
 squeeze. Same ward, two uses, and the lamp you stand in it is the real prize either way.
 
-**The Fiddler is the last ward unbuilt.** It is a damage-multiplier aura — the only thing left that
-makes other wards better rather than doing something itself — and it should land last, when a
-multiplier is a choice rather than a flat upgrade.
+### 5.5 The Fiddler (built 2026-07-30) — the roster is complete
+
+55 oil, one per map, +20% to every ward's damage within 260px. Branches are *Wayfaring Stranger*
+(reach: 320 → 390px) and *Shady Grove* (Kara moves 12% → 25% faster while he plays). Those are the
+two tunes the 2026-07-27 ruling cut from his aura, and this is where they were sent.
+
+**He flees.** Anything within 120px and the music stops; it takes 2.5s of clear ground before he
+picks it up again. He is not a tower, he is a man, and the aura is worth what it is worth precisely
+because the best place for the music is never the best place for him.
+
+> ⚠ **Measured, his damage aura is a bad buy on the numbers and I have not repriced it.**
+>
+> One more iron strip costs 25 and adds a whole strip. The Fiddler costs 55 and adds 20% to
+> everything in his circle — so on damage alone **he only beats buying strips at eleven wards inside
+> 260px**, which is not a board anyone will build.
+>
+> What redeems him is situational, not general: he is +20% on *salt* and on the *Bottle Tree*, and
+> the tree is the Drownd Girl's only answer. She takes 38s to kill with a tree alone against a 45s
+> traverse — marginal — and 32s with a Fiddler behind it. He is the difference on the one night that
+> cannot be solved with lanterns and iron.
+>
+> Left at the doc's numbers deliberately. If playtest shows he is simply never bought, the fix is
+> `boost 1.2 → 1.35` or `cost 55 → 40`, not both.
 
 **The roster split is built** (2026-07-27): Lantern Post is pure light, Cold Iron is the damage
 layer.
@@ -601,7 +621,26 @@ any instant with Space; auto-pauses on tab blur; state saves to `localStorage` a
 | **Bell Witch** *(boss, N3)* | 260 | 20 px/s | 25 | — | ✅ |
 | **Greenbrier Ghost** *(boss, N5)* | 220 | 26 px/s | 10 | — | ✅ |
 | **The Drover** *(boss, N7)* | 400 | 18 px/s | 40 | — | ✅ |
-| Drownd Girl · Hant Cat · Hollow Kin · Snallygaster · The Fetch | — | — | — | — | ❌ |
+| **Drownd Girl** *(endless pool)* | 190 | 24 px/s | 22 | salt 100%, iron 75% | ✅ |
+| Hant Cat · Hollow Kin · Snallygaster · The Fetch | — | — | — | — | ❌ |
+
+**The Drownd Girl, unblocked 2026-07-30.** She waited three weeks because her entire identity needed
+three systems that did not exist: salt to be immune to, running water to be stopped by, and a
+light-damage source to be killed with. All three shipped this week.
+
+Salt does nothing to her. Iron does a quarter — 5 passes of a fully-upgraded Rail Iron strip against
+a 45-second traverse. **The Bottle Tree is the answer**, being the one ward that deals light: 38s
+alone, 32s with a Fiddler behind it. She is the only enemy in the game that cannot be solved by the
+lantern-and-iron pairing every other night teaches, and she is why the counterplay matrix wanted
+damage *types* at all.
+
+She joins the **endless and daily boss pools** rather than the campaign: the seven nights already
+have their three slots filled, and §6 said the blocked bosses belong in the pool once their systems
+landed.
+
+> She is the only thing in the game that sets `crossesWater = false`, so a spring line stops her
+> dead. That is a soft-lock by construction if she cannot also be killed — an enemy that neither
+> passes nor dies hangs the night forever. It is load-bearing that light kills her in 38s.
 
 **Every boss carries a faint self-light** — `intensity 0.12, radius 70`, enough to hold itself at
 Dim and no more. So a boss is always visible and never killable on its own terms: you can watch

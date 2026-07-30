@@ -29,15 +29,18 @@ order — pick by what the game needs. In rough order of what it is missing most
 2. ~~Bond and the ball stash~~ — **built 2026-07-29** (§3.4a). Bond is escrowed for the length of a
    night and only committed when the night is held; stash banks immediately and survives a retry.
    That asymmetry is the consult's §6 anti-exploit and must not be flattened.
-3. ~~The remaining wards~~ — salt, the Bottle Tree and the Church Bell (§5.3), then the **Spring Line
-   and detour pathfinding** (§5.4) with the hose (§3.3). Only the **Fiddler** is left, and it should
-   land last. The stash shop was repriced with them (§9): 155 of sinks against ~97 banked.
+3. ~~The remaining wards~~ — **all seven built.** Salt, the Bottle Tree and the Church Bell (§5.3),
+   the Spring Line and detour pathfinding (§5.4) with the hose (§3.3), and the Fiddler (§5.5). The
+   stash shop was repriced alongside (§9): 155 of sinks against ~97 banked.
 4. ~~Hard mode's scars~~ — **built 2026-07-30** (§7.2a). Campaign only; the Long Road still keeps one
    life per run because campaign and endless scars would need separate ledgers.
 5. ~~Lead~~ — **built 2026-07-30** (§3.4b). The hose (§3.3) is the last of her specified abilities and
    is blocked on the spring line, which is blocked on detour pathfinding.
-6. **The blocked bosses** — Snallygaster (aerial pathing), Drownd Girl (salt + water + light damage),
-   the Fetch. Each is one system away.
+6. **The blocked bosses** — the **Drownd Girl shipped 2026-07-30** into the endless and daily pools
+   once salt, water and light damage all existed. Left: the **Snallygaster** (needs aerial pathing —
+   everything follows the road polyline or steers for the homestead) and **the Fetch** (needs
+   nothing; deferred by the consult). Also unbuilt: the Hant Cat and Hollow Kin, which were never
+   scheduled.
 
 **Four toys are blocked, not cut** — Ragged Fox needs bond, Tennis Ball needs the ball drop and
 stash, the Squeaker needs the bark, the Stuffed Duck needs the spring line. Shipping a toy whose

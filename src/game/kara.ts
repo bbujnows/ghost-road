@@ -491,6 +491,15 @@ export class Kara {
   private walking = false
 
   /**
+   * §5, the Fiddler's *Shady Grove* branch. She moves to it.
+   *
+   * A multiplier rather than a loadout field because the Fiddler can be frightened
+   * mid-wave and the music stops — this changes while she is walking, which nothing in
+   * `loadout` does.
+   */
+  tempo = 1
+
+  /**
    * One-shot flags the Game drains each frame. They exist because the bond and stash
    * ledgers belong to the Game, not to her — she does the thing, it does the accounting.
    */
@@ -990,7 +999,7 @@ export class Kara {
       } else {
         moving = true
         // The Blanket Scrap's parting gift: she comes out of the quilt already running.
-        const v = this.speed * (this.boost > 0 ? this.loadout.emergeSpeed : 1) * dt
+        const v = this.speed * (this.boost > 0 ? this.loadout.emergeSpeed : 1) * this.tempo * dt
         this.x += (dx / dist) * v
         this.y += (dy / dist) * v
         if (Math.abs(dx) > 1) this.facing = dx > 0 ? 1 : -1

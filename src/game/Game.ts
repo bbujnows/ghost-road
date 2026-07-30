@@ -8,6 +8,7 @@ import {
   FAST_FORWARD,
   BOTTLE_TREE,
   CHURCH_BELL,
+  FIDDLER,
   GUST,
   HOLD,
   HOMESTEAD_MAX_HP,
@@ -65,7 +66,7 @@ import {
 import type { Progress } from './progression'
 import { LightingSystem, bandOf, reachFraction } from './lighting'
 import type { Band, Light } from './lighting'
-import { BottleTree, ChurchBell, ColdIron, Lantern, SaltLine, SpringLine } from './wards'
+import { BottleTree, ChurchBell, ColdIron, Fiddler, Lantern, SaltLine, SpringLine } from './wards'
 import { AUTHORED_ROAD, HOMESTEAD, ROAD, buildScene, setRoad } from './world'
 import type { Smoke, Vec2 } from './world'
 
@@ -84,7 +85,7 @@ function mulberry32(seed: number): () => number {
 }
 
 /** The order they appear in the HUD, and therefore what keys 1–5 select. */
-export const WARD_ORDER: WardKind[] = ['lantern', 'iron', 'salt', 'spring', 'bottle', 'bell']
+export const WARD_ORDER: WardKind[] = ['lantern', 'iron', 'salt', 'spring', 'bottle', 'fiddler', 'bell']
 
 export const WARD_NAME: Record<WardKind, string> = {
   lantern: 'Lantern Post',
@@ -92,6 +93,7 @@ export const WARD_NAME: Record<WardKind, string> = {
   salt: 'Salt Line',
   spring: 'Spring Line',
   bottle: 'Bottle Tree',
+  fiddler: 'The Fiddler',
   bell: 'Church Bell',
 }
 
@@ -102,6 +104,7 @@ export const WARD_ROLE: Record<WardKind, string> = {
   salt: 'damage, in the dark',
   spring: 'they go round it',
   bottle: 'catches three',
+  fiddler: 'wards nearby hit harder',
   bell: 'reveals everything',
 }
 
@@ -111,6 +114,7 @@ export const WARD_COST: Record<WardKind, number> = {
   salt: SALT.cost,
   spring: SPRING.cost,
   bottle: BOTTLE_TREE.cost,
+  fiddler: FIDDLER.cost,
   bell: CHURCH_BELL.cost,
 }
 
@@ -378,6 +382,22 @@ export class Game {
   private bottles: BottleTree[] = []
   /** §5: one per map. */
   private bell: ChurchBell | null = null
+  private fiddler: Fiddler | null = null
+
+  /**
+   * §5. What the Fiddler is worth to a ward standing at this point — 1 if he is not
+   * built, out of range, or frightened.
+   *
+   * Computed from the *ward's* position, not the enemy's: the music reaches the thing
+   * doing the damage, which is what makes his placement a decision about your board rather
+   * than about where the road happens to be busy.
+   */
+  private boostAt(x: number, y: number): number {
+    if (!this.fiddler) return 1
+    return Math.hypot(x - this.fiddler.x, y - this.fiddler.y) <= this.fiddler.radius
+      ? this.fiddler.boost
+      : 1
+  }
   private bubbles: Bubble[] = []
   private bellyLight!: Light
   private selectedWard: WardId = 'lantern'
@@ -385,7 +405,7 @@ export class Game {
   /** Separate from the preview: this one carries a transform, that one does not. */
   private highlight = new Graphics()
   /** The placed ward under inspection. Cleared the moment one is placed or destroyed. */
-  private selected: Lantern | ColdIron | null = null
+  private selected: Lantern | ColdIron | Fiddler | null = null
 
   // Starts on the briefing so the player has time to read before anything walks.
   private phase: Phase = 'briefing'
@@ -820,17 +840,20 @@ export class Game {
   }
 
   /** The placed ward under a point, lanterns first — their lamps sit above the road. */
-  private wardAt(x: number, y: number): Lantern | ColdIron | null {
-    // Only upgradable wards are selectable. Salt, the tree and the bell have no branches,
-    // so a click on one would open an empty panel and eat a placement.
+  private wardAt(x: number, y: number): Lantern | ColdIron | Fiddler | null {
+    // Only upgradable wards are selectable. Salt, the water, the tree and the bell have no
+    // branches, so a click on one would open an empty panel and eat a placement.
     for (const l of this.lanterns) if (l.contains(x, y)) return l
     for (const s of this.irons) if (s.contains(x, y)) return s
+    if (this.fiddler?.contains(x, y)) return this.fiddler
     return null
   }
 
   private get selectedKind(): WardKind | null {
     if (!this.selected) return null
-    return this.selected instanceof Lantern ? 'lantern' : 'iron'
+    if (this.selected instanceof Lantern) return 'lantern'
+    if (this.selected instanceof Fiddler) return 'fiddler'
+    return 'iron'
   }
 
   /**
@@ -966,6 +989,8 @@ export class Game {
       }
     } else if (this.selectedWard === 'bell' && this.bell) {
       return 'there is only one bell'
+    } else if (this.selectedWard === 'fiddler' && this.fiddler) {
+      return 'there is only one fiddler'
     }
     return null
   }
@@ -993,6 +1018,7 @@ export class Game {
     if (
       this.selectedWard === 'bottle' ||
       this.selectedWard === 'bell' ||
+      this.selectedWard === 'fiddler' ||
       this.selectedWard === 'spring'
     ) {
       // All three are radius-or-nothing: the tree catches inside a circle, the water is a
@@ -1003,13 +1029,17 @@ export class Game {
           ? 0x6fd8e8
           : this.selectedWard === 'spring'
             ? 0x9fd8e0
-            : 0xd8c78a
+            : this.selectedWard === 'fiddler'
+              ? 0xe0c98a
+              : 0xd8c78a
       const r =
         this.selectedWard === 'bottle'
           ? BOTTLE_TREE.radius
           : this.selectedWard === 'spring'
             ? SPRING.radius
-            : 32
+            : this.selectedWard === 'fiddler'
+              ? FIDDLER.radius
+              : 32
       this.preview
         .circle(x, y, r)
         .fill({ color, alpha: blocked ? 0.04 : 0.08 })
@@ -1089,6 +1119,15 @@ export class Game {
         .stroke({ width: 1.5, color: gold, alpha: 0.55 })
       g.position.set(ward.x, ward.y)
       g.rotation = ward.light.angle ?? 0
+      return
+    }
+
+    if (ward instanceof Fiddler) {
+      g.circle(0, -20, ward.radius)
+        .fill({ color: gold, alpha: 0.04 })
+        .circle(0, -20, ward.radius)
+        .stroke({ width: 1.5, color: gold, alpha: 0.5 })
+      g.position.set(ward.x, ward.y)
       return
     }
 
@@ -1209,6 +1248,9 @@ export class Game {
       const tree = new BottleTree(x, y)
       this.bottles.push(tree)
       this.actors.addChild(tree.gfx)
+    } else if (this.selectedWard === 'fiddler') {
+      this.fiddler = new Fiddler(x, y)
+      this.actors.addChild(this.fiddler.gfx)
     } else {
       this.bell = new ChurchBell(x, y)
       this.actors.addChild(this.bell.gfx)
@@ -1374,6 +1416,12 @@ export class Game {
       this.actors.removeChild(this.bell.gfx)
       this.bell.gfx.destroy({ children: true })
       this.bell = null
+    }
+
+    if (this.fiddler) {
+      this.actors.removeChild(this.fiddler.gfx)
+      this.fiddler.gfx.destroy({ children: true })
+      this.fiddler = null
     }
 
     for (const b of this.bubbles) {
@@ -1601,18 +1649,34 @@ export class Game {
 
     // The iron does the killing now — but only where the lanterns have made it possible.
     for (const iron of this.irons) {
-      for (const hit of iron.update(dt, this.enemies, this.lighting)) {
+      for (const hit of iron.update(dt, this.enemies, this.lighting, this.boostAt(iron.x, iron.y))) {
         this.sparks.burst(hit.x, hit.y)
       }
     }
 
     // Salt does not care about the light. It is the one thing that does not.
     for (const salt of this.salts) {
-      for (const hit of salt.update(this.enemies, this.lighting)) this.sparks.burst(hit.x, hit.y)
+      for (const hit of salt.update(this.enemies, this.lighting, this.boostAt(salt.x, salt.y))) {
+        this.sparks.burst(hit.x, hit.y)
+      }
     }
 
     for (const tree of this.bottles) {
-      for (const hit of tree.update(dt, this.enemies, this.lighting)) this.sparks.burst(hit.x, hit.y)
+      for (const hit of tree.update(dt, this.enemies, this.lighting, this.boostAt(tree.x, tree.y))) {
+        this.sparks.burst(hit.x, hit.y)
+      }
+    }
+
+    // §5. He plays until something gets near him, and then he does not.
+    if (this.fiddler) {
+      let nearest = Infinity
+      for (const e of this.enemies) {
+        nearest = Math.min(nearest, Math.hypot(e.x - this.fiddler.x, e.y - this.fiddler.y))
+      }
+      this.fiddler.update(dt, nearest)
+      this.kara.tempo = this.fiddler.karaSpeed
+    } else {
+      this.kara.tempo = 1
     }
 
     // §3.3. She attacks water from a hose, so she attacks this, and it is the one place on

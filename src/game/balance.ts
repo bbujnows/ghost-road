@@ -88,7 +88,7 @@ export const COLD_IRON = {
 // both branches are open from the start; the exclusivity rule already does the work
 // that matters.
 
-export type BranchId = 'storm' | 'mirror' | 'graveyard' | 'rail'
+export type BranchId = 'storm' | 'mirror' | 'graveyard' | 'rail' | 'wayfaring' | 'shady'
 
 export interface LanternTier {
   cost: number
@@ -246,14 +246,69 @@ export const RAIL_TIERS: IronTier[] = [
   },
 ]
 
+/**
+ * **The Fiddler.** A man on the porch who plays while the hollow comes down the road, and
+ * runs inside the moment anything gets near him.
+ *
+ * The 2026-07-27 ruling cut his three switchable tunes: three auras in a five-minute game
+ * is a menu nobody opens twice. He has **one** — ward damage +20% within 260px — and the
+ * cut tunes survive as his branches, which is the better home for them.
+ *
+ * He is the only ward that makes other wards better rather than doing anything itself, so
+ * he was built last on purpose: a multiplier is only a choice once there is a roster worth
+ * multiplying. With six wards there is.
+ *
+ * **He flees.** Anything within 120px and the music stops — he is not a tower, he is a man,
+ * and the aura is worth what it is worth precisely because he cannot be left in front.
+ */
+export const FIDDLER = {
+  cost: 55,
+  radius: 260,
+  /** Multiplier on damage from any ward standing inside the music. */
+  boost: 1.2,
+  /** He stops playing if anything gets this close. */
+  fleeRadius: 120,
+  /** And does not start again until it has been clear this long. */
+  settle: 2.5,
+} as const
+
+export interface FiddlerTier {
+  cost: number
+  radius: number
+  boost: number
+  /** Multiplier on Kara's walk speed. */
+  karaSpeed: number
+  note: string
+}
+
+export const FIDDLER_BASE: Omit<FiddlerTier, 'cost' | 'note'> = {
+  radius: FIDDLER.radius,
+  boost: FIDDLER.boost,
+  karaSpeed: 1,
+}
+
+/** *Wayfaring Stranger* — the tune that carries. Reach. */
+export const WAYFARING_TIERS: FiddlerTier[] = [
+  { cost: 25, radius: 320, boost: 1.2, karaSpeed: 1, note: 'The music carries further — 320px.' },
+  { cost: 40, radius: 390, boost: 1.25, karaSpeed: 1, note: '390px, and a little more bite in it.' },
+]
+
+/** *Shady Grove* — the tune she likes. She moves to it. */
+export const SHADY_TIERS: FiddlerTier[] = [
+  { cost: 25, radius: 260, boost: 1.2, karaSpeed: 1.12, note: 'Kara moves 12% faster while he plays.' },
+  { cost: 40, radius: 260, boost: 1.2, karaSpeed: 1.25, note: '25% faster. She knows this one.' },
+]
+
 export const BRANCHES: Record<
   BranchId,
-  { ward: WardKind; name: string; role: string; tiers: (LanternTier | IronTier)[] }
+  { ward: WardKind; name: string; role: string; tiers: (LanternTier | IronTier | FiddlerTier)[] }
 > = {
   storm: { ward: 'lantern', name: 'Storm Glass', role: 'bigger, and cannot be put out', tiers: STORM_TIERS },
   mirror: { ward: 'lantern', name: 'Mirror Back', role: 'the same light, aimed', tiers: MIRROR_TIERS },
   graveyard: { ward: 'iron', name: 'Graveyard Iron', role: 'bites harder, then bites in the dim', tiers: GRAVEYARD_TIERS },
   rail: { ward: 'iron', name: 'Rail Iron', role: 'longer, then slows', tiers: RAIL_TIERS },
+  wayfaring: { ward: 'fiddler', name: 'Wayfaring Stranger', role: 'the music carries', tiers: WAYFARING_TIERS },
+  shady: { ward: 'fiddler', name: 'Shady Grove', role: 'she moves to it', tiers: SHADY_TIERS },
 }
 
 /**
@@ -261,11 +316,18 @@ export const BRANCHES: Record<
  * upgrades were built for, and bolting branches onto salt or a bell would be four more
  * nodes nobody asked for. `BRANCHES_FOR` is deliberately partial.
  */
-export type WardKind = 'lantern' | 'iron' | 'salt' | 'spring' | 'bottle' | 'bell'
+export type WardKind = 'lantern' | 'iron' | 'salt' | 'spring' | 'bottle' | 'bell' | 'fiddler'
 
+/**
+ * Three of the seven have branches. Salt, the water, the tree and the bell do not, and
+ * bolting four more nodes onto each would be sprawl rather than identity — but the Fiddler
+ * keeps his, because they are the tunes the 2026-07-27 ruling cut from his aura and this is
+ * where they were sent.
+ */
 export const BRANCHES_FOR: Partial<Record<WardKind, [BranchId, BranchId]>> = {
   lantern: ['storm', 'mirror'],
   iron: ['graveyard', 'rail'],
+  fiddler: ['wayfaring', 'shady'],
 }
 
 /**
@@ -409,6 +471,7 @@ export const PORCH_DAMAGE = {
   bellWitch: 25,
   greenbrier: 10,
   drover: 40,
+  drownd: 22,
 } as const
 
 // ─── §9 The ball stash economy ──────────────────────────────────────────────
@@ -582,6 +645,31 @@ export const GREENBRIER = {
   radius: 12,
   /** Seconds between one more thing standing up behind her. */
   raiseInterval: 2.4,
+} as const
+
+/**
+ * The Drownd Girl. **Unblocked 2026-07-30** — she was deferred for three weeks because her
+ * entire identity needed three systems that did not exist, and now all three do.
+ *
+ * §6: "Immune to salt. Cannot cross running water at all — the spring line is a hard wall."
+ * Consult §4 adds a 75% iron resist and *"light only"*.
+ *
+ * So: salt does nothing, iron does a quarter, and the **Bottle Tree's light damage is the
+ * answer** — the one ward in the game that deals light. She is the reason the counterplay
+ * matrix wanted damage *types* in the first place, and the first enemy who cannot be solved
+ * by the lantern-and-iron pairing every other night teaches.
+ *
+ * She is also the only thing in the game that sets `crossesWater = false`. That is a
+ * soft-lock risk by construction — an enemy that cannot pass and cannot be killed hangs the
+ * night forever — so it is load-bearing that light *can* kill her and that the wading rule
+ * exists for everything else.
+ */
+export const DROWND_GIRL = {
+  hp: 190,
+  speed: 24,
+  radius: 13,
+  saltResist: 1,
+  ironResist: 0.75,
 } as const
 
 /**
@@ -797,6 +885,7 @@ export type EnemyKind =
   | 'bellWitch'
   | 'greenbrier'
   | 'drover'
+  | 'drownd'
 
 export interface Group {
   kind: EnemyKind

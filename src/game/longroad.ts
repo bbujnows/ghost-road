@@ -62,7 +62,10 @@ export function windFor(n: number): number {
   return n >= 11 ? Math.max(16, 26 - Math.floor((n - 11) / 4) * 2) : 0
 }
 
-const BOSSES: EnemyKind[] = ['bellWitch', 'greenbrier', 'drover']
+// §6: the Drownd Girl joins here rather than in the campaign — the seven nights already
+// have their three boss slots filled, and the endless pool is where §6 said the blocked
+// bosses belong once their systems landed. Hers landed 2026-07-30.
+const BOSSES: EnemyKind[] = ['bellWitch', 'greenbrier', 'drover', 'drownd']
 const SUPPORT: EnemyKind[] = ['crawler', 'unseen', 'boneDog', 'tallowMan']
 
 export function isBossNight(n: number): boolean {

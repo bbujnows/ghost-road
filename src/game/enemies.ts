@@ -9,6 +9,7 @@ import {
   CRAWLER,
   DEATH_DURATION,
   DROVER,
+  DROWND_GIRL,
   GREENBRIER,
   PORCH_DAMAGE,
   ROAD_WALKER,
@@ -1321,6 +1322,79 @@ export class Drover extends Boss {
   }
 }
 
+/**
+ * The Drownd Girl. Salt does nothing to her, iron does a quarter, and running water is a
+ * wall she will not pass.
+ *
+ * **She is the only enemy that cannot be solved by the lantern-and-iron pairing every other
+ * night teaches**, and she is the reason the counterplay matrix wanted damage *types* at
+ * all. The Bottle Tree is the answer: it is the one ward in the game that deals light.
+ *
+ * She is also the only thing that sets `crossesWater = false`, which is a soft-lock risk by
+ * construction — something that cannot pass and cannot be killed hangs the night forever.
+ * It is load-bearing that light *can* kill her.
+ */
+export class DrowndGirl extends Boss {
+  readonly kind = 'drownd' as const
+
+  private readonly shroud = new Container()
+  private readonly hair = new Graphics()
+
+  constructor() {
+    super({ hp: DROWND_GIRL.hp, speed: DROWND_GIRL.speed, porchDamage: PORCH_DAMAGE.drownd })
+    this.drift = 6
+    this.gaitRate = 1.6
+    this.resists = { salt: DROWND_GIRL.saltResist, iron: DROWND_GIRL.ironResist }
+    this.crossesWater = false
+
+    const wet = 0x5a7a80
+    const pale = 0xc8d8d4
+    const H = 54
+
+    this.shadow.ellipse(0, 2, 13, 4).fill({ color: 0x000000, alpha: 0.26 })
+
+    const body = new Graphics()
+    // A shift that has been in the water a long time, clinging and heavy at the hem.
+    body
+      .moveTo(-6, -H + 12)
+      .quadraticCurveTo(-13, -H / 2, -14, 0)
+      .lineTo(14, 0)
+      .quadraticCurveTo(13, -H / 2, 6, -H + 12)
+      .fill({ color: wet, alpha: 0.9 })
+    // It drips. Constantly.
+    for (let i = 0; i < 6; i++) {
+      const x = -11 + i * 4.4
+      body.moveTo(x, -2).lineTo(x, 4 + (i % 3) * 3).stroke({ width: 1, color: pale, alpha: 0.3 })
+    }
+    body.ellipse(0, -H + 6, 6.5, 8).fill(pale)
+    // Eyes open, because they were open.
+    body.circle(-2.4, -H + 5, 1.5).fill(0x101c1e)
+    body.circle(2.4, -H + 5, 1.5).fill(0x101c1e)
+
+    this.hair.position.set(0, -H + 4)
+    this.shroud.addChild(body, this.hair)
+    this.frame.addChild(this.shroud)
+  }
+
+  protected animate(_dt: number) {
+    this.shroud.position.y = Math.sin(this.gait) * 1.4
+    this.shroud.rotation = Math.sin(this.gait * 0.8) * 0.04
+
+    // Hair that still moves as though it were underwater. It is the whole character.
+    this.hair.clear()
+    for (let i = 0; i < 7; i++) {
+      const a = -1.2 + i * 0.4
+      const sway = Math.sin(this.gait * 1.3 + i * 0.8) * 4
+      this.hair
+        .moveTo(Math.cos(a) * 6, Math.sin(a) * 6 - 2)
+        .quadraticCurveTo(Math.cos(a) * 12 + sway, Math.sin(a) * 12 + 4, Math.cos(a) * 9 + sway * 1.6, 14)
+        .stroke({ width: 1.6, color: 0x2f4448, alpha: 0.8 })
+    }
+
+    this.stretch.y = 1 - (1 - this.hp / this.maxHp) * 0.08
+  }
+}
+
 export function spawn(kind: EnemyKind): Enemy {
   if (kind === 'crawler') return new Crawler()
   if (kind === 'tallowMan') return new TallowMan()
@@ -1329,6 +1403,7 @@ export function spawn(kind: EnemyKind): Enemy {
   if (kind === 'bellWitch') return new BellWitch()
   if (kind === 'greenbrier') return new Greenbrier()
   if (kind === 'drover') return new Drover()
+  if (kind === 'drownd') return new DrowndGirl()
   return new RoadWalker()
 }
 
