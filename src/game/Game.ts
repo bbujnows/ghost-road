@@ -19,6 +19,7 @@ import {
   OIL_PER_WAVE,
   SALT,
   SHOW_BELLY,
+  SPRING,
   WAVE_BREAK,
 } from './balance'
 import { NIGHTS } from './nights'
@@ -64,7 +65,7 @@ import {
 import type { Progress } from './progression'
 import { LightingSystem, bandOf, reachFraction } from './lighting'
 import type { Band, Light } from './lighting'
-import { BottleTree, ChurchBell, ColdIron, Lantern, SaltLine } from './wards'
+import { BottleTree, ChurchBell, ColdIron, Lantern, SaltLine, SpringLine } from './wards'
 import { AUTHORED_ROAD, HOMESTEAD, ROAD, buildScene, setRoad } from './world'
 import type { Smoke, Vec2 } from './world'
 
@@ -83,12 +84,13 @@ function mulberry32(seed: number): () => number {
 }
 
 /** The order they appear in the HUD, and therefore what keys 1–5 select. */
-export const WARD_ORDER: WardKind[] = ['lantern', 'iron', 'salt', 'bottle', 'bell']
+export const WARD_ORDER: WardKind[] = ['lantern', 'iron', 'salt', 'spring', 'bottle', 'bell']
 
 export const WARD_NAME: Record<WardKind, string> = {
   lantern: 'Lantern Post',
   iron: 'Cold Iron',
   salt: 'Salt Line',
+  spring: 'Spring Line',
   bottle: 'Bottle Tree',
   bell: 'Church Bell',
 }
@@ -98,6 +100,7 @@ export const WARD_ROLE: Record<WardKind, string> = {
   lantern: 'light',
   iron: 'damage, in light',
   salt: 'damage, in the dark',
+  spring: 'they go round it',
   bottle: 'catches three',
   bell: 'reveals everything',
 }
@@ -106,6 +109,7 @@ export const WARD_COST: Record<WardKind, number> = {
   lantern: LANTERN.cost,
   iron: COLD_IRON.cost,
   salt: SALT.cost,
+  spring: SPRING.cost,
   bottle: BOTTLE_TREE.cost,
   bell: CHURCH_BELL.cost,
 }
@@ -323,6 +327,20 @@ export class Game {
   private fedTonight = false
   /** §3.2 Lead: once per night, and there is only one night it exists on. */
   private leadUsed = false
+  /** §3.3: true while she is in the water. */
+  private playingInWater = false
+  /** §3.3: bond from the water is capped per night. */
+  private waterBond = 0
+
+  /**
+   * §2.5. Recompute which lanterns stand in mist. Called when a spring line appears or the
+   * board is cleared — never per frame, because neither the posts nor the water move.
+   */
+  private remist() {
+    for (const lantern of this.lanterns) {
+      lantern.setMisted(this.springs.some((s) => s.boostsLantern(lantern.x, lantern.y)))
+    }
+  }
 
   /** §7.2. Resolved from the scar count at the start of every night. */
   private scarred = scarEffects(0)
@@ -356,6 +374,7 @@ export class Game {
   private lanterns: Lantern[] = []
   private irons: ColdIron[] = []
   private salts: SaltLine[] = []
+  private springs: SpringLine[] = []
   private bottles: BottleTree[] = []
   /** §5: one per map. */
   private bell: ChurchBell | null = null
@@ -937,6 +956,10 @@ export class Game {
       for (const s of this.salts) {
         if (Math.hypot(s.x - x, s.y - y) < SALT.minSpacing) return 'too close to another line'
       }
+    } else if (this.selectedWard === 'spring') {
+      for (const s of this.springs) {
+        if (Math.hypot(s.x - x, s.y - y) < SPRING.minSpacing) return 'too close to other water'
+      }
     } else if (this.selectedWard === 'bottle') {
       for (const b of this.bottles) {
         if (Math.hypot(b.x - x, b.y - y) < BOTTLE_TREE.radius) return 'too close to another tree'
@@ -967,11 +990,26 @@ export class Game {
 
     const blocked = this.placementBlocker(x, y) !== null
 
-    if (this.selectedWard === 'bottle' || this.selectedWard === 'bell') {
-      // Both are radius-or-nothing: the tree catches inside a circle, the bell is a
-      // fixture with no footprint at all beyond where it stands.
-      const color = blocked ? 0xff8f6b : this.selectedWard === 'bottle' ? 0x6fd8e8 : 0xd8c78a
-      const r = this.selectedWard === 'bottle' ? BOTTLE_TREE.radius : 32
+    if (
+      this.selectedWard === 'bottle' ||
+      this.selectedWard === 'bell' ||
+      this.selectedWard === 'spring'
+    ) {
+      // All three are radius-or-nothing: the tree catches inside a circle, the water is a
+      // circle they go round, and the bell is a fixture with no footprint at all.
+      const color = blocked
+        ? 0xff8f6b
+        : this.selectedWard === 'bottle'
+          ? 0x6fd8e8
+          : this.selectedWard === 'spring'
+            ? 0x9fd8e0
+            : 0xd8c78a
+      const r =
+        this.selectedWard === 'bottle'
+          ? BOTTLE_TREE.radius
+          : this.selectedWard === 'spring'
+            ? SPRING.radius
+            : 32
       this.preview
         .circle(x, y, r)
         .fill({ color, alpha: blocked ? 0.04 : 0.08 })
@@ -1141,6 +1179,8 @@ export class Game {
         this.lighting,
         this.progress.betterLamp ? BETTER_LAMP_BONUS : 0,
       )
+      // §2.5: a post set in the mist throws further from the moment it is lit.
+      lantern.setMisted(this.springs.some((s) => s.boostsLantern(x, y)))
       this.lanterns.push(lantern)
       this.actors.addChild(lantern.gfx)
       this.bloom.source.addChild(lantern.emissive)
@@ -1159,6 +1199,12 @@ export class Game {
       )
       this.salts.push(salt)
       this.actors.addChild(salt.gfx)
+    } else if (this.selectedWard === 'spring') {
+      const spring = new SpringLine(x, y, this.lighting)
+      this.springs.push(spring)
+      this.actors.addChild(spring.gfx)
+      // §2.5: any lantern already standing here starts throwing further immediately.
+      this.remist()
     } else if (this.selectedWard === 'bottle') {
       const tree = new BottleTree(x, y)
       this.bottles.push(tree)
@@ -1309,6 +1355,14 @@ export class Game {
       s.gfx.destroy({ children: true })
     }
     this.salts = []
+
+    for (const s of this.springs) {
+      this.lighting.remove(s.light)
+      this.actors.removeChild(s.gfx)
+      s.gfx.destroy({ children: true })
+    }
+    this.springs = []
+    this.waterBond = 0
 
     for (const b of this.bottles) {
       this.actors.removeChild(b.gfx)
@@ -1561,6 +1615,45 @@ export class Game {
       for (const hit of tree.update(dt, this.enemies, this.lighting)) this.sparks.burst(hit.x, hit.y)
     }
 
+    // §3.3. She attacks water from a hose, so she attacks this, and it is the one place on
+    // the board that is good for her.
+    this.playingInWater = false
+    let nearestWater: SpringLine | null = null
+    let nearestWaterDist = Infinity
+
+    for (const spring of this.springs) {
+      const playing = spring.playZone(this.kara.x, this.kara.y) && !this.kara.busy
+      if (playing) this.playingInWater = true
+      spring.update(dt, playing)
+
+      const d = Math.hypot(spring.x - this.kara.x, spring.y - this.kara.y)
+      if (d < nearestWaterDist) {
+        nearestWaterDist = d
+        nearestWater = spring
+      }
+    }
+
+    // §3.3: "when idle with no command, she drifts toward nearby water on her own — leave
+    // her unattended near a spring line and you will find her in it."
+    //
+    // **The hard lock is not here, and must not come back.** The original design had her
+    // refuse to leave without spending a bubble; the consult cut it for charging the player
+    // to undo something the game did to them. A plain Send pulls her out. What survives is
+    // the drifting — the personality is in the wandering off, not in a fee.
+    if (nearestWater && !this.playingInWater && this.kara.idle && nearestWaterDist < 260) {
+      this.kara.moveTo(nearestWater.x, nearestWater.y)
+    }
+
+    if (this.playingInWater) {
+      this.kara.rest(SPRING.healPerSecond * dt)
+      // Bond, capped per night: §3.4 lists this alongside the ball, and without a cap a
+      // player would simply park her in the creek and stop playing the game.
+      const room = Math.max(0, SPRING.bondCapPerNight - this.waterBond)
+      const gain = Math.min(room, SPRING.bondPerSecond * dt)
+      this.waterBond += gain
+      this.pendingBond += gain
+    }
+
     this.bell?.animate(dt)
 
     // The Tallow Man wants the lanterns and the Bone Dog wants Kara, so an enemy has to
@@ -1569,6 +1662,7 @@ export class Game {
       lighting: this.lighting,
       kara: this.kara,
       lanterns: this.lanterns,
+      barriers: this.springs,
       raise: (kind, pathT) => this.raise(kind, pathT),
       lie: (x, y, seconds) => {
         this.phantoms.push({ x, y, until: this.elapsed + seconds })

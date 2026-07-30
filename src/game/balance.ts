@@ -261,7 +261,7 @@ export const BRANCHES: Record<
  * upgrades were built for, and bolting branches onto salt or a bell would be four more
  * nodes nobody asked for. `BRANCHES_FOR` is deliberately partial.
  */
-export type WardKind = 'lantern' | 'iron' | 'salt' | 'bottle' | 'bell'
+export type WardKind = 'lantern' | 'iron' | 'salt' | 'spring' | 'bottle' | 'bell'
 
 export const BRANCHES_FOR: Partial<Record<WardKind, [BranchId, BranchId]>> = {
   lantern: ['storm', 'mirror'],
@@ -334,6 +334,42 @@ export const BOTTLE_TREE = {
   damage: 20,
   /** Per bottle, after it empties. */
   recharge: 8,
+} as const
+
+/**
+ * **The Spring Line.** Running water, tapped out of the hillside and let loose across the
+ * road. In folklore the dead cannot cross it; here they will not, and go round instead.
+ *
+ * It is the only ward that deals no damage and puts out no useful light, and it is priced
+ * like a lantern anyway, because of what §2.5 calls the game's central ward combo: **a
+ * lantern standing in the mist throws 35% further and 0.15 brighter.** The water is worth
+ * having for the lamp you put beside it.
+ *
+ * The boost is applied **per light, exactly as Lead is** (see LEAD): a lantern whose post
+ * stands inside the mist is boosted everywhere its pool reaches. §2.5 says "within the
+ * mist", but the lightmap draws one sprite per light and cannot vary a boost across a
+ * single pool — so a per-sample reading would make the render and the gameplay disagree,
+ * which this system has avoided since the first build. Placing the post *in* the water is
+ * the rule, and it is a legible one.
+ */
+export const SPRING = {
+  cost: 45,
+  /** §5: enemies path around this. Kara plays in it. */
+  radius: 110,
+  /** §2.5: a weak light on its own — Dim, never Lit. */
+  intensity: 0.2,
+  /** §2.5, for any lantern standing in it. */
+  lanternRadius: 1.35,
+  lanternIntensity: 0.15,
+  /** §3.3: she is in Play within half the radius. */
+  playFraction: 0.5,
+  /** §3.3: while she is in it. */
+  healPerSecond: 8,
+  bondPerSecond: 0.5,
+  bondCapPerNight: 6,
+  /** §3.3: the barrier is wider while she is playing in it. */
+  karaBoost: 1.3,
+  minSpacing: 140,
 } as const
 
 /**

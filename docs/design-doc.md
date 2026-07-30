@@ -256,6 +256,14 @@ the game did to them. What survives instead is the *reluctance* — on being cal
 water she obeys, but the animation shows it: a last snap at the spray, a full-body shake, and a
 look back. The personality is in the leaving, not in a fee.
 
+**Built 2026-07-30** with the Spring Line (§5.4). She heals 8 HP/s in it, earns bond at 0.5/s to a
++6 nightly cap, widens the barrier to ×1.3 while she plays, and **drifts toward nearby water on her
+own whenever she is idle and unasked** — leave her unattended by a spring line and you will find her
+in it. The hard lock is not implemented and must not come back.
+
+The bond cap is the load-bearing number: without it a player would park her in the creek and stop
+playing the game, which is the opposite of what a bond track is for.
+
 ### 3.4 Bond
 
 Bond runs 0–100 across the campaign.
@@ -460,14 +468,43 @@ something to spend them on. That is what lets a global effect cost only 65.
 > instrument you normally read the dark with, which is the trade that stops it being a free button.
 > Measured: ~3.3s of board-wide freeze per minute, and 2.5s is 7% of a walker's entire traverse.
 
-**Two wards remain unbuilt, and both are blocked rather than deferred:**
+### 5.4 The Spring Line, and how detours work (built 2026-07-30)
 
-- **The Spring Line** needs enemies to *path around* a barrier. Everything on the board follows the
-  road polyline or steers directly for the homestead; there is no detour logic and adding it is a
-  larger change than the ward. §3.3's softened water rules wait on it too.
-- **The Fiddler** is a damage-multiplier aura. It is the least interesting thing left and the only
-  one that makes other wards better rather than doing something itself — it should land last, when
-  there is enough roster for a multiplier to be a choice rather than a flat upgrade.
+**45 oil. It deals no damage and its light is Dim at best.** What it does is refuse to be walked
+through, and make a lantern standing in it throw 35% further and 0.15 brighter — §2.5's central ward
+combo, and the entire reason it is priced like a lantern.
+
+The lantern boost is applied **per post, exactly as Lead is per light** (§3.4b): a lamp whose post
+stands inside the mist is boosted everywhere its pool reaches. §2.5 says "within the mist", but the
+lightmap draws one sprite per light and cannot vary a boost across a single pool, so a per-sample
+reading would make the render and the gameplay disagree. Putting the post *in* the water is the rule.
+
+**Detours are an offset, not a pathfinder.** Steering enemies freely around an obstacle would destroy
+`pathT`, and `pathT` is load-bearing in four places — Hold clamps to it, bosses raise at it, Ear-Perk
+projects along it, and `arrived` reads it. Instead the road parameterisation is untouched and only a
+*perpendicular offset* moves, analytically: a barrier straddling a stretch of road blocks a
+contiguous interval of offsets, and the enemy takes the nearest reachable edge of it. They bulge
+around the water and rejoin, and every other system still sees them on the road.
+
+| Water placed | What happens |
+| --- | --- |
+| Beside the road, centre 40px off | They detour up to 74px and keep coming |
+| Beside the road, centre 70px off | 44px detour |
+| **Dead centre on the road** | No shoulder is wide enough — **they wade the fringe at half speed** |
+
+> ⚠ **The wading rule exists because the first version soft-locked the game.** A spring line centred
+> on the road needs 114px of detour at its widest against a 95px shoulder, so nothing could pass —
+> and because the water deals no damage, the wave could never empty and **the night would hang
+> forever.** A barrier that can fully block a road, in a game whose waves end by emptying, is not a
+> ward. `Enemy.crossesWater` defaults to **true** for exactly this reason. The Drownd Girl is the one
+> thing it is meant to stop, and whatever sets it false must also be killable by something.
+
+So the decision is *where*: on the road it is a chokepoint everything crawls through, beside it a
+squeeze. Same ward, two uses, and the lamp you stand in it is the real prize either way.
+
+**The Fiddler is the last ward unbuilt.** It is a damage-multiplier aura — the only thing left that
+makes other wards better rather than doing something itself — and it should land last, when a
+multiplier is a choice rather than a flat upgrade.
 
 **The roster split is built** (2026-07-27): Lantern Post is pure light, Cold Iron is the damage
 layer.

@@ -29,10 +29,9 @@ order — pick by what the game needs. In rough order of what it is missing most
 2. ~~Bond and the ball stash~~ — **built 2026-07-29** (§3.4a). Bond is escrowed for the length of a
    night and only committed when the night is held; stash banks immediately and survives a retry.
    That asymmetry is the consult's §6 anti-exploit and must not be flattened.
-3. ~~The remaining wards~~ — **salt, the Bottle Tree and the Church Bell built 2026-07-29** (§5.3).
-   The Spring Line needs detour pathfinding and the Fiddler should land last; both are blocked
-   rather than deferred. The stash shop was repriced with them (§9): 155 of sinks against ~97
-   banked, 63% affordable, and the gap closes or widens depending on how much you use her.
+3. ~~The remaining wards~~ — salt, the Bottle Tree and the Church Bell (§5.3), then the **Spring Line
+   and detour pathfinding** (§5.4) with the hose (§3.3). Only the **Fiddler** is left, and it should
+   land last. The stash shop was repriced with them (§9): 155 of sinks against ~97 banked.
 4. ~~Hard mode's scars~~ — **built 2026-07-30** (§7.2a). Campaign only; the Long Road still keeps one
    life per run because campaign and endless scars would need separate ledgers.
 5. ~~Lead~~ — **built 2026-07-30** (§3.4b). The hose (§3.3) is the last of her specified abilities and
@@ -210,6 +209,14 @@ native binary downloaded corrupt. Fix with `npm install lightningcss-win32-x64-m
 - **`as const` infers literal types.** `private charges = BUBBLES.maxCharges` is typed `2`, not
   `number`, and any assignment fails. Annotate `: number` on fields initialised from a balance
   constant.
+- **Detours move a perpendicular offset, never the path parameter.** `Enemy.lateral` bulges around a
+  barrier while `t` advances normally, because `pathT` is load-bearing in four places (Hold's clamp,
+  boss raising, Ear-Perk projection, `arrived`). Anything that moves an enemy off its `t` breaks all
+  four silently.
+- **`Enemy.crossesWater` defaults to true and a barrier must never fully block the road.** Waves end
+  by emptying, so an impassable barrier that deals no damage hangs the night forever. Measured: a
+  spring line centred on the road needs 114px of detour against a 95px shoulder. Anything that sets
+  `crossesWater` false must also be killable by something else.
 - **`DARK_CAPABLE` is the only sanctioned bypass of the light rule, and only salt may use it.**
   `applyDamage` still floors every other threshold at Dim. If a second ward ever needs it, that is a
   design decision, not a plumbing one — §2.1 is the game.

@@ -58,11 +58,24 @@ export interface Quarry {
   bite(amount: number): void
 }
 
+/**
+ * Something on the road they will not walk through. `SpringLine` satisfies it.
+ *
+ * Running water, in folklore and here. The consult's roster wants a ward enemies *path
+ * around* rather than one that hurts them, and this is the interface that makes it real.
+ */
+export interface Barrier {
+  readonly x: number
+  readonly y: number
+  readonly radius: number
+}
+
 /** Everything on the board that an enemy is allowed to react to, or do to it. */
 export interface EnemyContext {
   lighting: LightingSystem
   kara: Quarry
   lanterns: Snuffable[]
+  barriers: Barrier[]
   /** Raise something onto the road at a point already travelled. Bosses use this. */
   raise: (kind: EnemyKind, pathT: number) => void
   /** Plant a phantom in Kara's hearing. The Bell Witch's whole attack. */
@@ -281,26 +294,128 @@ export abstract class Enemy {
     if (Math.abs(dx) > 0.5) this.facing = dx > 0 ? 1 : -1
   }
 
+  /**
+   * How far off the road's centre line it is currently walking.
+   *
+   * **This is how detours work, and it is deliberately not a pathfinder.** Steering an
+   * enemy freely around an obstacle would destroy `pathT`, and `pathT` is load-bearing in
+   * four places — Hold clamps to it, bosses raise things at it, Ear-Perk projects along it,
+   * and `arrived` reads it. Instead the parameterisation is untouched and only a
+   * *perpendicular offset* moves, so an enemy bulges around a barrier and rejoins the road
+   * without ever leaving it as far as every other system is concerned.
+   */
+  protected lateral = 0
+  /** Past this the road has no shoulder left. */
+  protected static readonly MAX_LATERAL = 95
+  /** Speed while squeezing past the fringe of water it could not fully skirt. */
+  protected static readonly WADE = 0.5
+  /** True while it is wading the edge of a barrier rather than going cleanly round. */
+  protected wading = false
+  /** True only for something water genuinely stops. Nothing built sets this. */
+  protected walled = false
+
+  /**
+   * **Whether running water stops it dead.**
+   *
+   * ⚠ Defaults to true — *everything gets past* — and that default is load-bearing. §5
+   * says enemies **path around** the spring line; it is the Drownd Girl alone for whom it
+   * is "a hard wall", and she is not built.
+   *
+   * Measured before this existed: a spring line placed dead-centre on the road needs 114px
+   * of detour at its widest against a 95px shoulder, so nothing could pass — and because
+   * the water deals no damage, the wave could never clear and **the night would hang
+   * forever.** A barrier that can fully block a road in a game whose waves end by emptying
+   * is a soft-lock, not a ward. Anything that sets this false must also be killable.
+   */
+  protected crossesWater = true
+
+  /**
+   * Choose a lateral offset that clears every barrier on this stretch.
+   *
+   * Analytic rather than iterative: project each barrier into the road's own frame, and a
+   * barrier near this stretch blocks a contiguous interval of offsets. Take the nearest
+   * edge of that interval that is still on the road.
+   */
+  private steer(cx: number, cy: number, nx: number, ny: number, tx: number, ty: number, barriers: Barrier[], dt: number) {
+    let target = 0
+    this.wading = false
+    let blocked = false
+
+    for (const b of barriers) {
+      const dx = b.x - cx
+      const dy = b.y - cy
+      const along = dx * tx + dy * ty
+      const across = dx * nx + dy * ny
+
+      // Only barriers actually straddling this point on the road matter.
+      if (Math.abs(along) >= b.radius) continue
+      const half = Math.sqrt(b.radius * b.radius - along * along)
+
+      const lo = across - half
+      const hi = across + half
+      if (target <= lo || target >= hi) continue
+
+      // Inside the blocked interval: leave by whichever edge is nearer and reachable.
+      const left = lo - 4
+      const right = hi + 4
+      const canLeft = Math.abs(left) <= Enemy.MAX_LATERAL
+      const canRight = Math.abs(right) <= Enemy.MAX_LATERAL
+
+      if (canLeft && (!canRight || Math.abs(left - target) <= Math.abs(right - target))) target = left
+      else if (canRight) target = right
+      else {
+        // No shoulder wide enough to clear it. Anything that can cross water wades the
+        // fringe at half speed; anything that cannot is stopped where it stands.
+        blocked = true
+        target = Math.sign(across || 1) * -Enemy.MAX_LATERAL
+      }
+    }
+
+    this.wading = blocked && this.crossesWater
+    this.walled = blocked && !this.crossesWater
+
+    // Ease rather than snap, so a detour reads as a swerve and not a teleport.
+    this.lateral += (target - this.lateral) * Math.min(1, dt * 4)
+  }
+
   /** Walk the road. The default behaviour, and what most of the roster does. */
-  protected advance(dt: number, speed = this.speed) {
+  protected advance(dt: number, speed = this.speed, barriers: Barrier[] = []) {
     const segment = Math.min(Math.floor(this.t), this.path.length - 2)
     const from = this.path[segment]
     const to = this.path[segment + 1]
     const segLength = Math.hypot(to.x - from.x, to.y - from.y) || 1
 
-    this.t = Math.min(this.path.length - 1, this.t + (speed * this.slowFactor * dt) / segLength)
+    const tx = (to.x - from.x) / segLength
+    const ty = (to.y - from.y) / segLength
+    const frac0 = this.t - segment
+    const cx0 = from.x + (to.x - from.x) * frac0
+    const cy0 = from.y + (to.y - from.y) * frac0
+
+    if (barriers.length) this.steer(cx0, cy0, -ty, tx, tx, ty, barriers, dt)
+    else this.lateral += (0 - this.lateral) * Math.min(1, dt * 4)
+
+    // Walled means it does not get past at all. Wading means it does, slowly, at the edge.
+    if (!this.walled) {
+      const wade = this.wading ? Enemy.WADE : 1
+      this.t = Math.min(
+        this.path.length - 1,
+        this.t + (speed * this.slowFactor * wade * dt) / segLength,
+      )
+    }
 
     const frac = this.t - segment
-    this.x = from.x + (to.x - from.x) * frac
-    this.y = from.y + (to.y - from.y) * frac
+    const cx = from.x + (to.x - from.x) * frac
+    const cy = from.y + (to.y - from.y) * frac
+    this.x = cx + -ty * this.lateral
+    this.y = cy + tx * this.lateral
 
     // The segment's own heading, which is stable across the whole segment.
     this.face(to.x - from.x)
   }
 
   /** Move. Override to do anything other than walk down the road. */
-  protected behave(dt: number, _ctx: EnemyContext) {
-    this.advance(dt)
+  protected behave(dt: number, ctx: EnemyContext) {
+    this.advance(dt, this.speed, ctx.barriers)
   }
 
   /** Pose the body for this frame. `gait` has already been advanced. */
@@ -680,7 +795,7 @@ export class TallowMan extends Enemy {
       return
     }
 
-    this.advance(dt)
+    this.advance(dt, this.speed, ctx.barriers)
   }
 
   protected animate(_dt: number) {
@@ -848,7 +963,7 @@ export class BoneDog extends Enemy {
       return
     }
 
-    this.advance(dt)
+    this.advance(dt, this.speed, ctx.barriers)
   }
 
   protected animate(_dt: number) {
@@ -1013,7 +1128,7 @@ export class BellWitch extends Boss {
   }
 
   protected behave(dt: number, ctx: EnemyContext) {
-    this.advance(dt)
+    this.advance(dt, this.speed, ctx.barriers)
 
     this.lieTimer -= dt
     if (this.lieTimer > 0) return
@@ -1103,7 +1218,7 @@ export class Greenbrier extends Boss {
   }
 
   protected behave(dt: number, ctx: EnemyContext) {
-    this.advance(dt)
+    this.advance(dt, this.speed, ctx.barriers)
     this.surge = Math.max(0, this.surge - dt * 2.5)
 
     this.raiseTimer -= dt
@@ -1186,7 +1301,7 @@ export class Drover extends Boss {
   }
 
   protected behave(dt: number, ctx: EnemyContext) {
-    this.advance(dt)
+    this.advance(dt, this.speed, ctx.barriers)
     this.drive = Math.max(0, this.drive - dt * 3)
 
     this.raiseTimer -= dt

@@ -9,6 +9,7 @@ import {
   LANTERN,
   LANTERN_BASE,
   SALT,
+  SPRING,
 } from './balance'
 import type { BranchId, IronTier, LanternTier } from './balance'
 import type { Light, LightingSystem } from './lighting'
@@ -168,10 +169,7 @@ export class Lantern {
       snuffScale: tier.snuffScale,
     }
 
-    this.light.radius = radius * tier.along
-    // A circle stays a circle: leaving radiusY undefined keeps it on the cheaper path.
-    this.light.radiusY = tier.across === tier.along ? undefined : radius * tier.across
-
+    this.applyLight()
     this.drawFittings()
     return tier.cost
   }
@@ -223,6 +221,27 @@ export class Lantern {
     return true
   }
 
+  /**
+   * §2.5. Set once when a spring line is built or removed, not per frame — the mist does
+   * not move, so neither does this.
+   */
+  setMisted(misted: boolean) {
+    if (this.misted === misted) return
+    this.misted = misted
+    this.applyLight()
+  }
+
+  private misted = false
+
+  /** Everything that decides the light's shape, in one place so nothing drifts. */
+  private applyLight() {
+    const scale = this.misted ? SPRING.lanternRadius : 1
+    const radius = this.stats.radius * scale
+    this.light.radius = radius * this.stats.along
+    this.light.radiusY =
+      this.stats.across === this.stats.along ? undefined : radius * this.stats.across
+  }
+
   /** Called every frame, including while a wave is between spawns. */
   animate(dt: number) {
     this.sway += dt * 2.4
@@ -234,7 +253,8 @@ export class Lantern {
     const want = this.out > 0 ? 0 : 1
     this.burn += (want - this.burn) * Math.min(1, dt * (want === 0 ? 14 : 2.6))
 
-    this.light.intensity = LANTERN.intensity * this.burn
+    // §2.5: the mist adds intensity as well as reach.
+    this.light.intensity = (LANTERN.intensity + (this.misted ? SPRING.lanternIntensity : 0)) * this.burn
 
     const flicker = 1 + Math.sin(this.sway * 3.1) * 0.09
     this.flame.scale.set(this.burn * flicker, this.burn * (1 + Math.sin(this.sway * 2.3) * 0.13))
@@ -471,6 +491,106 @@ export class BottleTree {
       g.moveTo(hook.x - 2.5, hook.y + 2)
         .quadraticCurveTo(hook.x - 3.4, hook.y + 8, hook.x - 1.4, hook.y + 11)
         .stroke({ width: 0.9, color: 0xd8f2ff, alpha: empty ? 0.15 : 0.45 })
+    }
+  }
+}
+
+/**
+ * The Spring Line. Water off the hillside, let loose across the road.
+ *
+ * It hurts nothing and lights almost nothing. What it does is **refuse to be walked
+ * through** — the dead go round — and **make a lantern standing in it worth 35% more**,
+ * which §2.5 calls the game's central ward combo and is the entire reason it costs what a
+ * lantern costs.
+ *
+ * It is also the one place in the game that is *good* for her. §3.3: she plays in it, and
+ * she heals while she does.
+ */
+export class SpringLine {
+  readonly gfx = new Container()
+  readonly light: Light
+  readonly x: number
+  readonly y: number
+
+  private surface = new Graphics()
+  private t = Math.random() * 10
+  /** §3.3: the barrier is wider while she is in it. */
+  private boosted = false
+
+  constructor(x: number, y: number, lighting: LightingSystem) {
+    this.x = x
+    this.y = y
+
+    // §2.5: Dim on its own, never Lit. It is a hint of water, not a lamp.
+    this.light = lighting.add({
+      x,
+      y,
+      radius: SPRING.radius,
+      color: 0x9fd8e0,
+      intensity: SPRING.intensity,
+    })
+
+    this.gfx.addChild(this.surface)
+    this.gfx.position.set(x, y)
+  }
+
+  /** What enemies path around. Wider while she is playing in it (§3.3). */
+  get radius() {
+    return SPRING.radius * (this.boosted ? SPRING.karaBoost : 1)
+  }
+
+  /** True when a point is close enough to the middle for her to be in Play (§3.3). */
+  playZone(px: number, py: number): boolean {
+    return Math.hypot(px - this.x, py - this.y) <= SPRING.radius * SPRING.playFraction
+  }
+
+  contains(px: number, py: number): boolean {
+    return Math.hypot(px - this.x, py - this.y) <= SPRING.radius
+  }
+
+  /** §2.5: a lantern standing in the mist. Per-post, exactly as Lead is per-light. */
+  boostsLantern(lx: number, ly: number): boolean {
+    return Math.hypot(lx - this.x, ly - this.y) <= SPRING.radius
+  }
+
+  update(dt: number, karaPlaying: boolean) {
+    this.boosted = karaPlaying
+    this.t += dt
+
+    // Running water: concentric ripples pushed outward, plus a spray where she is in it.
+    const g = this.surface.clear()
+    const r = this.radius
+
+    g.circle(0, 0, r).fill({ color: 0x2b4a52, alpha: 0.18 })
+
+    for (let i = 0; i < 4; i++) {
+      const phase = (this.t * 0.35 + i * 0.25) % 1
+      g.circle(0, 0, r * (0.25 + phase * 0.75)).stroke({
+        width: 1.2,
+        color: 0xbfe8f0,
+        alpha: 0.22 * (1 - phase),
+      })
+    }
+
+    // The channel itself, cutting across.
+    for (let i = 0; i < 5; i++) {
+      const y = -r * 0.55 + i * (r * 0.28)
+      const wobble = Math.sin(this.t * 1.6 + i) * 5
+      g.moveTo(-r * 0.9, y)
+        .quadraticCurveTo(wobble, y + 6, r * 0.9, y)
+        .stroke({ width: 1.4, color: 0x8fd0dc, alpha: 0.3 })
+    }
+
+    if (karaPlaying) {
+      // She is attacking it, so it is attacking back.
+      for (let i = 0; i < 9; i++) {
+        const a = this.t * 5 + i * 0.7
+        const d = (i / 9) * r * 0.7
+        g.circle(Math.cos(a) * d, Math.sin(a) * d * 0.5, 1.4 + (i % 3)).fill({
+          color: 0xdff4f8,
+          alpha: 0.4,
+        })
+      }
     }
   }
 }

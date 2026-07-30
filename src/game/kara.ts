@@ -685,6 +685,11 @@ export class Kara {
     return this.walking
   }
 
+  /** Free, standing still, and nobody has asked her for anything. §3.3 uses this. */
+  get idle() {
+    return this.mode === 'free' && this.target === null && !this.ballOut
+  }
+
   /**
    * §5 Church Bell. It rings and she cannot hear anything else for a moment.
    *
