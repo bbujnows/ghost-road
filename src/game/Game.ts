@@ -587,8 +587,15 @@ export class Game {
      * What the crosshair/pointer/arrow used to say is now said by the moth's mood, set in
      * `renderPasses`. This is scoped to the canvas only: the HUD is separate DOM sitting
      * on top, so every button and panel keeps a normal arrow and stays clickable.
+     *
+     * **Both lines are needed.** Setting the inline style alone does not hold: Pixi's own
+     * EventSystem calls `setCursor()` on every pointer move, and with no interactive
+     * target it falls back to mode `default`, whose style is `inherit` — so it writes the
+     * arrow straight back over the top. The inline style covers the frames before the
+     * first mouse move; changing the default is what makes it stay gone.
      */
     canvas.style.cursor = 'none'
+    this.app.renderer.events.cursorStyles.default = 'none'
 
     const toWorld = (e: MouseEvent) => {
       const r = canvas.getBoundingClientRect()
