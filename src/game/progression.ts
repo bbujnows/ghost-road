@@ -261,6 +261,11 @@ export function loadProgress(): Progress {
   }
 }
 
+/** Everything back to the First Night: bond, stash, toys, upgrades, difficulty, scars. */
+export function freshProgress(): Progress {
+  return { ...EMPTY, toys: [...STARTING_TOYS] }
+}
+
 export function saveProgress(p: Progress) {
   try {
     localStorage.setItem(KEY, JSON.stringify(p))

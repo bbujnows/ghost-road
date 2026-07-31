@@ -451,6 +451,7 @@ export interface HudProps {
   onBuy: (id: string) => void
   onToggleFetching: () => void
   onSetHard: (hard: boolean) => void
+  onAbandon: () => void
 }
 
 /**
@@ -464,12 +465,17 @@ function Curtain({
   action,
   hint,
   onAction,
+  secondary,
+  onSecondary,
 }: {
   title: string
   sub?: string
   action: string
   hint?: string
   onAction: () => void
+  /** An optional way out that is not the obvious one — leaving, starting over. */
+  secondary?: string
+  onSecondary?: () => void
 }) {
   return (
     <div className="veil">
@@ -480,6 +486,11 @@ function Curtain({
           {action}
         </button>
         {hint && <p className="footnote">{hint}</p>}
+        {secondary && onSecondary && (
+          <button type="button" className="quiet" onClick={onSecondary}>
+            {secondary}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -572,6 +583,7 @@ export function Hud({
   onBuy,
   onToggleFetching,
   onSetHard,
+  onAbandon,
 }: HudProps) {
   if (!state) return null
 
@@ -838,10 +850,15 @@ export function Hud({
             <button type="button" className="primary" onClick={onToggleHelp}>
               Back to it
             </button>
-            {/* Progress persists across sessions, so there has to be a way to let it go.
-                Buried in the help sheet on purpose — it is not a thing to hit by accident. */}
-            <button type="button" className="quiet" onClick={onRestartCampaign}>
-              Start the seven nights over
+            {state.phase !== 'briefing' && (
+              <button type="button" className="quiet" onClick={onAbandon}>
+                Stop this night and start it over
+              </button>
+            )}
+            {/* Wipes bond, stash, toys, scars and progress. Buried on purpose and worded so
+                nobody hits it thinking it restarts the night — that button is above. */}
+            <button type="button" className="quiet danger" onClick={onRestartCampaign}>
+              Erase all progress and begin again
             </button>
           </div>
         </div>
@@ -852,8 +869,19 @@ export function Hud({
           title="Paused"
           sub="The road waits."
           action="Resume"
-          hint="or press Space"
+          hint="Space to resume · R to start over"
           onAction={onResume}
+          // The way out of a night you no longer want. What it does depends on the mode,
+          // so the label says which — a button called "restart" would be lying on two of
+          // the three.
+          secondary={
+            state.mode === 'nightly'
+              ? 'Leave — today’s road is already spent'
+              : state.mode === 'longroad'
+                ? 'End the run and walk a new road'
+                : `Start ${state.nightName.toLowerCase()} over`
+          }
+          onSecondary={onAbandon}
         />
       )}
 

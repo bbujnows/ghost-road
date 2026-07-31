@@ -204,6 +204,17 @@ native binary downloaded corrupt. Fix with `npm install lightningcss-win32-x64-m
   so the player can land on an overlay without having pressed anything — "press Space" is a
   shortcut for people who already know it, never the exit. Use the `Curtain` component in
   `src/ui/Hud.tsx`, which enforces title + action button + optional keyboard hint.
+- **Every overlay that stops play must also carry a way to *leave the night*, not just resume it.**
+  Pause and the help sheet both do. A player who wants to stop and start over should never have to
+  lose on purpose to get there.
+- **"Start over" buttons must actually start over.** `restartCampaign()` wipes bond, stash, toys,
+  upgrades, difficulty and scars — it previously only reset the night number, so a button labelled
+  "start the seven nights over" left a maxed-out dog behind. A destructive button that is not
+  destructive is worse than either option.
+- **Leaving a night means something different in each mode, and the label has to say which.** The
+  campaign restarts the night; the Nightly Road cannot give the attempt back; the Long Road ends the
+  run. One generic "restart" would silently hand two of the three modes a free retry and make their
+  numbers worthless.
 - **Escape always means "get me out of this overlay."**
 - **While the board is frozen, clicks must not reach it.** `Game.inputLocked` gates pointer input;
   without it you can spend oil on a paused game.

@@ -58,6 +58,7 @@ import {
   SALT_SACK_BONUS,
   SCARS,
   SHOP,
+  freshProgress,
   loadProgress,
   saveProgress,
   scarEffects,
@@ -632,8 +633,11 @@ export class Game {
         // Escape always means "get me out of this overlay".
         if (this.helpOpen || this.paused) this.resume()
         else this.selected = null
-      } else if (key === 'r' && (this.phase === 'failed' || this.phase === 'complete')) {
-        this.restart()
+      } else if (key === 'r') {
+        if (this.phase === 'failed' || this.phase === 'complete') this.restart()
+        // Mid-night, R only works from the pause screen. Bound to the live board it would
+        // be one fumbled keypress away from throwing away a night you were winning.
+        else if (this.paused && !this.helpOpen) this.abandonNight()
       }
     }
     // §11: pause the instant the tab loses focus. It is a game played at a desk.
@@ -1587,6 +1591,34 @@ export class Game {
   }
 
   /**
+   * Stop the night you are in and start over.
+   *
+   * **What that means depends on the mode, and each answer is the mode's own rule rather
+   * than a convenience.** A single "restart" that ignored them would quietly hand the
+   * Nightly Road a second attempt and the Long Road a free retry, and both of those are
+   * the only thing making their numbers worth anything.
+   */
+  abandonNight() {
+    if (this.phase === 'briefing') return
+
+    if (this.mode === 'nightly') {
+      // §7.2: one attempt. Leaving does not give it back — the day is already spent, and
+      // the streak has already been resolved by however it went.
+      this.mode = 'campaign'
+      this.layRoad(AUTHORED_ROAD)
+    } else if (this.mode === 'longroad') {
+      // §8: a run has a definite ending, and walking away is one of them. New seed, new
+      // road, back to Night 8 — the same as losing, because it is.
+      saveBest(this.runNight - 1)
+      this.beginRun()
+    }
+
+    // Campaign: just this night again. Bond earned tonight is discarded with it, which is
+    // the same anti-farm rule a loss follows.
+    this.retryNight()
+  }
+
+  /**
    * §7.2. Difficulty is chosen at the start of a campaign, not during one — a run that
    * could switch modes mid-way would make its own scars meaningless.
    */
@@ -1604,9 +1636,22 @@ export class Game {
     this.fetching = !this.fetching
   }
 
-  /** Wipes progress and starts over at the First Night. */
+  /**
+   * Erase everything and begin again: bond, stash, toys, permanent upgrades, difficulty,
+   * scars, and the campaign position.
+   *
+   * **This really does wipe it all**, which the previous version did not — it only reset
+   * the night number, so a button labelled "start over" left a maxed-out dog and a full
+   * toy shelf behind. A destructive button that is not destructive is worse than either.
+   */
   restartCampaign() {
+    this.progress = freshProgress()
+    saveProgress(this.progress)
     this.nightIndex = 0
+    this.campaignCleared = false
+    this.mode = 'campaign'
+    this.toy = 'rope'
+    this.layRoad(AUTHORED_ROAD)
     this.save()
     this.retryNight()
   }

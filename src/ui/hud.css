@@ -802,3 +802,17 @@ kbd {
 .quiet:hover {
   color: #ff8f6b;
 }
+
+/* Erasing everything should not look like the button above it. */
+.quiet.danger {
+  margin-top: 2px;
+  color: #7a5a52;
+}
+
+.quiet.danger:hover {
+  color: #ff6b6b;
+}
+
+.curtain .quiet {
+  margin-top: 14px;
+}

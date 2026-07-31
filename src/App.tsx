@@ -46,6 +46,7 @@ export default function App() {
   const buy = useCallback((id: string) => gameRef.current?.buy(id), [])
   const toggleFetching = useCallback(() => gameRef.current?.toggleFetching(), [])
   const setHard = useCallback((hard: boolean) => gameRef.current?.setHard(hard), [])
+  const abandon = useCallback(() => gameRef.current?.abandonNight(), [])
 
   return (
     <div className="app">
@@ -68,6 +69,7 @@ export default function App() {
           onBuy={buy}
           onToggleFetching={toggleFetching}
           onSetHard={setHard}
+          onAbandon={abandon}
         />
       </div>
     </div>
