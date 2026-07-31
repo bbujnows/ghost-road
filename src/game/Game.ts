@@ -36,7 +36,7 @@ import {
 import type { NightlyNight } from './nightly'
 import { BRANCHES, BRANCHES_FOR } from './balance'
 import type { BranchId, EnemyKind, WardKind } from './balance'
-import { Bloom, Motes, Sparks, Weather, vignette } from './atmosphere'
+import { Bloom, Moth, Motes, Shake, Sparks, Weather, vignette } from './atmosphere'
 import { Audio } from './audio'
 import { Bubble } from './bubbles'
 import { Boss, Corpse, setEnemyScale, spawn } from './enemies'
@@ -449,6 +449,9 @@ export class Game {
   private helpOpen = false
   private speed: number = 1
   private sparks!: Sparks
+  private shake!: Shake
+  private moth = new Moth()
+  private mothLayer = new Container()
 
   private pointer = { x: WORLD_WIDTH / 2, y: WORLD_HEIGHT / 2 }
   private stateHandler: ((s: GameState) => void) | null = null
@@ -529,6 +532,9 @@ export class Game {
     this.sparks = new Sparks({ x: 330, y: 46 })
     this.bloom.source.addChild(this.sparks.gfx)
 
+    // Impact. Drives the whole stage, so it is created before anything is added to it.
+    this.shake = new Shake()
+
     // Above the darkness overlay, so the player can see where the pool will land.
     // Fog sits above the darkness overlay with the motes: it is weather in front of the
     // hollow, not paint on it.
@@ -540,12 +546,20 @@ export class Game {
       this.preview,
     )
 
+    /**
+     * The cursor gets its own layer, above even the vignette, and it is the one thing on
+     * the stage that screen shake is not allowed to move — see `renderPasses`, which
+     * cancels the stage offset back out of it every frame.
+     */
+    this.mothLayer.addChild(this.moth.gfx)
+
     this.app.stage.addChild(
       this.scene,
       this.lighting.overlay,
       this.bloom.output,
       this.foreground,
       vignette(WORLD_WIDTH, WORLD_HEIGHT),
+      this.mothLayer,
     )
 
     // Pick up where they left off before the first frame runs, so fog and starting oil
@@ -567,9 +581,14 @@ export class Game {
 
   private bindInput() {
     const canvas = this.app.canvas
-    // Set per frame in renderPasses: a crosshair means the click will spend oil, an arrow
-    // means it will not. The cursor is the honest readout of what the mouse is armed with.
-    canvas.style.cursor = 'default'
+    /**
+     * No system cursor over the board — the moth is the cursor.
+     *
+     * What the crosshair/pointer/arrow used to say is now said by the moth's mood, set in
+     * `renderPasses`. This is scoped to the canvas only: the HUD is separate DOM sitting
+     * on top, so every button and panel keeps a normal arrow and stays clickable.
+     */
+    canvas.style.cursor = 'none'
 
     const toWorld = (e: MouseEvent) => {
       const r = canvas.getBoundingClientRect()
@@ -581,6 +600,14 @@ export class Game {
 
     const onMove = (e: MouseEvent) => {
       this.pointer = toWorld(e)
+    }
+    // With the system cursor hidden, a moth left sitting at the last place the hand was
+    // is a moth that looks stuck. It goes when the hand goes, including onto the HUD.
+    const onEnter = () => {
+      this.moth.gfx.visible = true
+    }
+    const onLeave = () => {
+      this.moth.gfx.visible = false
     }
     const onDown = (e: MouseEvent) => {
       if (this.inputLocked) return
@@ -662,6 +689,8 @@ export class Game {
     canvas.addEventListener('mousemove', onMove)
     canvas.addEventListener('mousedown', onDown)
     canvas.addEventListener('contextmenu', onContext)
+    canvas.addEventListener('mouseenter', onEnter)
+    canvas.addEventListener('mouseleave', onLeave)
     window.addEventListener('keydown', onKey)
     window.addEventListener('blur', onBlur)
 
@@ -669,6 +698,8 @@ export class Game {
       () => canvas.removeEventListener('mousemove', onMove),
       () => canvas.removeEventListener('mousedown', onDown),
       () => canvas.removeEventListener('contextmenu', onContext),
+      () => canvas.removeEventListener('mouseenter', onEnter),
+      () => canvas.removeEventListener('mouseleave', onLeave),
       () => window.removeEventListener('keydown', onKey),
       () => window.removeEventListener('blur', onBlur),
     )
@@ -1038,6 +1069,17 @@ export class Game {
 
     this.drawSelection()
 
+    /**
+     * Nothing in hand means nothing to preview.
+     *
+     * Without this the chain below falls through to its final `else` — the iron strip —
+     * and paints a ghost for a ward the player never picked and a click will not place.
+     * That branch predates the tool cursor being nullable, when `selectedWard` was always
+     * one of seven things; the `else` was a safe way to say "salt or iron" and silently
+     * became "salt, or iron, or nothing at all".
+     */
+    if (!this.selectedWard) return
+
     // Over one of your own wards the click selects rather than builds, so showing a
     // placement ghost there would be a lie about what the next click does.
     if (this.wardAt(x, y)) return
@@ -1220,6 +1262,10 @@ export class Game {
         // Snuffed exactly as the front passes it, so outages stagger across the map.
         if (lantern.x > wasFront && lantern.x <= this.gustBand.front) {
           lantern.snuff(GUST.duration)
+          // A small knock per lamp as the front takes it. Because the strongest impulse
+          // wins rather than accumulating, a wide gust reads as one long shudder
+          // travelling across the board instead of a pile-up.
+          this.shake.punch(1.8, 0.22)
         }
       }
 
@@ -1838,6 +1884,9 @@ export class Game {
 
       if (enemy.arrived) {
         this.homesteadHp -= enemy.porchDamage
+        // Something got through. Scaled across the actual porch-damage range (5 for a
+        // Crawler, 40 for the Drover) so the two do not feel like the same event.
+        this.shake.punch(1.7 + enemy.porchDamage * 0.085)
         enemy.hp = 0
         // §10. She has been silent all night and all campaign. Something is on the porch,
         // so it is no longer a warning — it is a verdict, and it fires exactly once.
@@ -1872,6 +1921,9 @@ export class Game {
         const lit = this.lighting.lightAt(enemy.x, enemy.y) >= BAND_LIT
         this.oil += lit ? OIL_PER_LIT_KILL : OIL_PER_DARK_KILL
         this.sparks.wisp(enemy.x, enemy.y)
+        // It comes apart as it goes down. The Corpse still falls — the embers are the
+        // thing leaving, the body is the evidence it was ever there.
+        this.sparks.dissolve(enemy.x, enemy.y, enemy.ash)
         this.corpses.push(new Corpse(enemy.gfx))
         // §9: one item per three kills. It is *owed* here, not banked — she still has to
         // go out into the dark and drag it back, and that trip is the price.
@@ -2014,6 +2066,9 @@ export class Game {
     if (this.kara.wentDown) {
       this.kara.wentDown = false
       this.pendingBond += BOND.down
+      // The hardest hit in the game. She always gets back up, and it should still land
+      // like something the player let happen.
+      this.shake.punch(5, 0.42)
     }
 
     // ── Errands finishing ────────────────────────────────────────────────────
@@ -2061,16 +2116,30 @@ export class Game {
   /** Lightmap, bloom, motes, sparks, placement preview — the passes that run every frame. */
   private renderPasses(dt: number) {
     this.sortActors()
-    this.app.canvas.style.cursor = this.selectedWard
-      ? 'crosshair'
-      : this.wardAt(this.pointer.x, this.pointer.y)
-        ? 'pointer'
-        : 'default'
+    // The moth is the cursor, so its mood has to carry what the crosshair used to say:
+    // armed means this click spends oil, hover means it will open something, idle means
+    // it does nothing at all.
+    this.moth.update(
+      dt,
+      this.pointer.x,
+      this.pointer.y,
+      this.selectedWard ? 'armed' : this.wardAt(this.pointer.x, this.pointer.y) ? 'hover' : 'idle',
+      (x, y) => this.lighting.lightAt(x, y),
+    )
     this.lighting.update(this.app.renderer, dt)
     this.weather.update(dt, this.night.fog)
     this.motes.update(dt, (x, y) => this.lighting.lightAt(x, y))
     this.sparks.update(dt)
     this.bloom.update(this.app.renderer)
+    // Shares the scaled dt with every other pass, so on fast-forward an impact recovers
+    // as quickly as the hit that caused it — the whole board speeds up together.
+    this.shake.update(dt, this.app.stage)
+
+    // The cursor does not shake. Shake moves the whole stage, and a moth that slid a few
+    // pixels off the point it acts on — during an impact, which is exactly when the
+    // player is reacting — would be the misplacement problem the pinned body prevents.
+    this.mothLayer.position.set(-this.app.stage.position.x, -this.app.stage.position.y)
+
     this.drawPreview()
   }
 

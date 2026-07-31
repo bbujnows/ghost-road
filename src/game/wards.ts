@@ -16,6 +16,7 @@ import {
 import type { BranchId, FiddlerTier, IronTier, LanternTier } from './balance'
 import type { Light, LightingSystem } from './lighting'
 import type { Enemy } from './enemies'
+import { shade } from './shading'
 
 /**
  * Upgrades, consult §4: two branches, two tiers, bought with oil during the night.
@@ -59,6 +60,36 @@ export class Upgradable {
  * specced (design doc §5 / consult §4) but not built. Build order is consult §9.
  */
 
+/**
+ * The fan of shafts a caged lamp throws down onto the road.
+ *
+ * Wedges rather than a cone, because the lamp has bars: the gaps are what make shafts.
+ * Each is filled with a vertical gradient from lamplight to near-black — under additive
+ * blending, near-black is indistinguishable from transparent, so the shaft fades out
+ * along its length without needing a per-vertex alpha Graphics cannot give it.
+ */
+function buildRays(): Graphics {
+  const rays = new Graphics()
+  const COUNT = 7
+
+  for (let i = 0; i < COUNT; i++) {
+    const t = i / (COUNT - 1)
+    // Fanned across the downward arc. Never straight up — there is a cap on the lamp.
+    const a = Math.PI * 0.22 + t * Math.PI * 0.56
+    const half = 0.05 + (i % 2) * 0.022
+    const len = 44 * (0.72 + (i % 3) * 0.15)
+
+    rays
+      .moveTo(0, -6)
+      .lineTo(Math.cos(a - half) * len, -6 + Math.sin(a - half) * len)
+      .lineTo(Math.cos(a + half) * len, -6 + Math.sin(a + half) * len)
+      .fill({ fill: shade(0xffd9a0, 0x0a0600), alpha: 0.14 })
+  }
+
+  rays.blendMode = 'add'
+  return rays
+}
+
 export class Lantern {
   readonly light: Light
   readonly gfx = new Container()
@@ -77,6 +108,20 @@ export class Lantern {
   private housing = new Container()
   private flame = new Graphics()
   private fittings = new Graphics()
+  /**
+   * Shafts thrown through the lamp's cage.
+   *
+   * **Decoration, and deliberately kept that way.** They live in the emissive layer, not
+   * the lightmap: `lightAt()` cannot see them and no ward reads them, so a ray falling
+   * across a stretch of road promises the player nothing about whether that stretch is
+   * lit. This game has been careful since the first build that the picture and the
+   * gameplay agree, and the only safe way to add light that is *not* light is to keep it
+   * somewhere the simulation cannot reach.
+   *
+   * Built once and animated by alpha alone — a fan of wedges rebuilt per lantern per
+   * frame would be the most expensive decoration in the game for no visible gain.
+   */
+  private rays = buildRays()
   private sway = Math.random() * Math.PI * 2
 
   /** Seconds left in the dark. The Tallow Man puts this on the clock. */
@@ -135,7 +180,7 @@ export class Lantern {
     this.flame.ellipse(0, -6, 3, 5).fill({ color: 0xfff0cc, alpha: 0.95 })
     this.flame.ellipse(0, -6, 6, 9).fill({ color: 0xffc078, alpha: 0.35 })
     this.emissive.position.set(x + 10, y - 36)
-    this.emissive.addChild(this.flame, this.smoke)
+    this.emissive.addChild(this.rays, this.flame, this.smoke)
   }
 
   /** True while it is putting out no light at all. */
@@ -262,6 +307,11 @@ export class Lantern {
     this.flame.scale.set(this.burn * flicker, this.burn * (1 + Math.sin(this.sway * 2.3) * 0.13))
     this.flame.position.x = Math.sin(this.sway) * 1.2
     this.flame.alpha = this.burn
+
+    // The shafts breathe with the flame and go out with it. Swung by the housing's own
+    // sway, so the light moves because the lamp is moving rather than on its own clock.
+    this.rays.alpha = this.burn * this.burn * (0.82 + Math.sin(this.sway * 3.1) * 0.18)
+    this.rays.rotation = Math.sin(this.sway) * 0.045
 
     // A thread of smoke off the dead wick, so a dark post still reads as a lantern that
     // was put out rather than one you forgot to build.

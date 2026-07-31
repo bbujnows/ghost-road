@@ -1,6 +1,7 @@
 import { Container, Graphics } from 'pixi.js'
 import { BLANKET, BUBBLES, HOLD, KARA, KARA_WALK_SPEED, LEAD, SHOW_BELLY } from './balance'
 import type { LightingSystem } from './lighting'
+import { form } from './shading'
 import { loadoutFor } from './toys'
 import type { Loadout, ToyId } from './toys'
 import { HOMESTEAD } from './world'
@@ -172,7 +173,14 @@ interface Pose {
 }
 
 /** The torso outline, shared so the belly band can hug its real lower edge. */
-function torso(g: Graphics, color: number) {
+/**
+ * `shaded` puts a gradient through the gold so her back catches the light and her belly
+ * falls into shadow. It is passed rather than assumed because **this is only ever safe on
+ * the coat rig.** The markings rig draws the same silhouette in white, above the darkness
+ * overlay, and that white is the one thing in the game the dark is never allowed to take —
+ * a gradient through it would dim exactly the part §2.4 depends on staying legible.
+ */
+function torso(g: Graphics, color: number, shaded = false) {
   g.moveTo(-20, -31)
     // Back: rises to the withers, dips slightly over the shoulder.
     .quadraticCurveTo(-6, -36, 12, -35)
@@ -183,7 +191,7 @@ function torso(g: Graphics, color: number) {
     .quadraticCurveTo(2, -17.5, -16, -20)
     // Haunch.
     .quadraticCurveTo(-23, -24, -20, -31)
-    .fill(color)
+    .fill(shaded ? { fill: form(color) } : { color })
 }
 
 function makeLeg(mode: 'coat' | 'markings', far: boolean, hip: { x: number; y: number }): Leg {
@@ -272,7 +280,7 @@ function createRig(mode: 'coat' | 'markings'): Rig {
     )
 
     const body = new Graphics()
-    torso(body, GOLD)
+    torso(body, GOLD, true)
     // Shading inside the silhouette, never a blob sitting on top of it.
     body.ellipse(-11, -25, 8, 6).fill({ color: GOLD_SHADE, alpha: 0.45 })
     body.moveTo(14, -34).quadraticCurveTo(19, -27, 17, -20).stroke({ width: 1, color: GOLD_SHADE, alpha: 0.5 })

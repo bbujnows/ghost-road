@@ -26,16 +26,24 @@ export class Bloom {
   private glow: Sprite
 
   constructor(width: number, height: number) {
-    // Full resolution. A half-res texture would soften the sharp copy, and the sharp
-    // copy includes Kara's white markings — the one thing that must never go mushy.
-    this.texture = RenderTexture.create({ width, height })
+    /**
+     * The texture matches the canvas, so the sharp copy is pixel-exact. It carries Kara's
+     * white markings — the one thing that must never go mushy — and at `RenderTexture`'s
+     * default resolution of 1 they were being upscaled on every HiDPI screen, which is the
+     * opposite of what this comment used to promise.
+     */
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    this.texture = RenderTexture.create({ width, height, resolution: dpr })
 
     this.sharp = new Sprite(this.texture)
 
     this.glow = new Sprite(this.texture)
     this.glow.blendMode = 'add'
     this.glow.alpha = 0.55
-    this.glow.filters = [new BlurFilter({ strength: 14, quality: 4 })]
+    // The blur itself runs at HALF resolution. Four passes over the whole frame was the
+    // largest single per-frame cost in the game, and a copy whose entire purpose is to be
+    // out of focus is the one thing that loses nothing to being resampled.
+    this.glow.filters = [new BlurFilter({ strength: 14, quality: 4, resolution: 0.5 })]
 
     this.output.addChild(this.sharp, this.glow)
   }
@@ -102,6 +110,120 @@ export class Motes {
         .circle(m.x, m.y, m.size)
         .fill({ color: 0xffe6bd, alpha: Math.min(0.5, (lit - 0.2) * 0.9) })
     }
+  }
+}
+
+/** What the next click will do — the readout the OS cursor used to carry. */
+export type MothMode = 'idle' | 'armed' | 'hover'
+
+/** Blend two packed RGB colours. */
+function mix(a: number, b: number, t: number): number {
+  const r = ((a >> 16) & 0xff) + (((b >> 16) & 0xff) - ((a >> 16) & 0xff)) * t
+  const g = ((a >> 8) & 0xff) + (((b >> 8) & 0xff) - ((a >> 8) & 0xff)) * t
+  const c = (a & 0xff) + ((b & 0xff) - (a & 0xff)) * t
+  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(c)
+}
+
+/**
+ * The moth. **It is the cursor** — the OS pointer is hidden over the board.
+ *
+ * That imposes two rules, and both of them cost something the earlier draft of this class
+ * was spending freely:
+ *
+ *  - **The body sits exactly on the click point.** No wander, no spring, no lag. A cursor
+ *    that drifts off the spot it acts on is a cursor that misplaces lantern posts, and
+ *    misplaced posts are the specific complaint this game already fixed once. All the life
+ *    is in the wings, which beat around a body that does not move.
+ *  - **Its mood is the readout.** Hiding the pointer throws away crosshair-means-this-will-
+ *    spend-oil, so the moth has to say it instead: warm and fast when a ward is in hand,
+ *    wide and bright over something you own, cool and slow when a click does nothing.
+ *
+ * Rotation is allowed because it turns about the body's centre, which is the click point,
+ * so it cannot move where the click lands.
+ */
+export class Moth {
+  readonly gfx = new Graphics()
+
+  /** Wing-beat phase. */
+  private wing = 0
+  /** 0 at rest, 1 agitated. Rises with pointer movement and with being armed. */
+  private flutter = 0
+  /** 0 cool, 1 warm — eased, so the mode change is a mood rather than a switch. */
+  private warmth = 0
+  /** 0 normal, 1 flared wide over something you own. */
+  private flare = 0
+  private facing = 0
+  private lastX = 0
+  private lastY = 0
+
+  update(
+    dt: number,
+    px: number,
+    py: number,
+    mode: MothMode,
+    lightAt: (x: number, y: number) => number,
+  ) {
+    const dx = px - this.lastX
+    const dy = py - this.lastY
+    const moved = Math.hypot(dx, dy)
+    this.lastX = px
+    this.lastY = py
+
+    // Agitated by the hand moving and by carrying something that costs oil. Falls off
+    // quickly when both stop, so a resting moth genuinely rests.
+    const stirred = Math.min(1, moved / 6) * 0.75 + (mode === 'armed' ? 0.55 : 0)
+    const wants = Math.min(1, stirred)
+    this.flutter += (wants - this.flutter) * Math.min(1, dt * (wants > this.flutter ? 18 : 3.4))
+
+    this.warmth += ((mode === 'armed' ? 1 : 0) - this.warmth) * Math.min(1, dt * 7)
+    this.flare += ((mode === 'hover' ? 1 : 0) - this.flare) * Math.min(1, dt * 9)
+
+    this.wing += dt * (4 + this.flutter * 30)
+
+    // Turns to face the direction of travel, but only while there is travel worth facing
+    // and never faster than it could actually turn.
+    if (moved > 1.2) {
+      const want = Math.atan2(dy, dx) + Math.PI / 2
+      let delta = ((want - this.facing + Math.PI) % (Math.PI * 2)) - Math.PI
+      if (delta < -Math.PI) delta += Math.PI * 2
+      this.facing += delta * Math.min(1, dt * 12)
+    }
+
+    this.draw(px, py, lightAt(px, py))
+  }
+
+  private draw(px: number, py: number, lit: number) {
+    const g = this.gfx.clear()
+    // Pinned. This is the whole contract of the class.
+    g.position.set(px, py)
+    g.rotation = this.facing
+
+    // Wings beat while agitated and are held open at rest; flared wider again over
+    // anything you own, which is what makes "this click opens something" legible.
+    const beat = 0.32 + Math.abs(Math.cos(this.wing)) * 0.68
+    const open = (1 - this.flutter * (1 - beat)) * (1 + this.flare * 0.3)
+    const w = 6.5 * open
+
+    // Always readable — it is the cursor — but it still catches the light, so it belongs
+    // to the hollow rather than to the HUD.
+    const a = (0.62 + Math.min(1, lit) * 0.34) * (1 + this.flare * 0.14)
+
+    const upper = mix(0xe4dfd0, 0xffc078, this.warmth)
+    const lower = mix(0xd2ccbc, 0xe8a559, this.warmth)
+    const dust = mix(0xbfcfc4, 0xffb060, this.warmth)
+
+    // A soft halo, warm when armed. It reads as the moth having found a flame.
+    g.ellipse(0, 0, 9, 7.5).fill({ color: dust, alpha: (0.05 + this.warmth * 0.09) * a })
+    g.ellipse(-w * 0.55, -1.5, w, 4.2).fill({ color: upper, alpha: 0.78 * a })
+    g.ellipse(w * 0.55, -1.5, w, 4.2).fill({ color: lower, alpha: 0.72 * a })
+    g.ellipse(-w * 0.4, 2, w * 0.62, 2.6).fill({ color: lower, alpha: 0.6 * a })
+    g.ellipse(w * 0.4, 2, w * 0.62, 2.6).fill({ color: lower, alpha: 0.55 * a })
+    g.ellipse(0, 0, 1.25, 3.6).fill({ color: 0x2e2a24, alpha: 0.88 * a })
+    g.moveTo(-0.6, -3)
+      .lineTo(-2.4, -6)
+      .moveTo(0.6, -3)
+      .lineTo(2.4, -6)
+      .stroke({ width: 0.7, color: 0x2e2a24, alpha: 0.7 * a })
   }
 }
 
@@ -226,7 +348,8 @@ export class Sparks {
   /** Add to the bloom source so everything here glows. */
   readonly gfx = new Graphics()
 
-  private embers: { x: number; y: number; vx: number; vy: number; life: number }[] = []
+  private embers: { x: number; y: number; vx: number; vy: number; life: number; color: number }[] =
+    []
   private wisps: { x: number; y: number; sx: number; sy: number; cx: number; cy: number; t: number }[] = []
   private readonly target: { x: number; y: number }
 
@@ -248,6 +371,32 @@ export class Sparks {
         vx: Math.cos(a) * speed,
         vy: Math.sin(a) * speed - 24,
         life: 0.5 + Math.random() * 0.3,
+        color: 0xffb060,
+      })
+    }
+  }
+
+  /**
+   * A death coming apart.
+   *
+   * Wider, slower and colder than `burst`, and in the dead thing's own colour rather than
+   * lamplight — this is the body going, not the lantern landing a tick. It rises: the
+   * upward drift is what separates a thing dispersing from a thing exploding, and the
+   * former is the one that suits the tone.
+   */
+  dissolve(x: number, y: number, color: number) {
+    if (this.embers.length > 140) return
+    const n = 10 + Math.floor(Math.random() * 5)
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2
+      const speed = 10 + Math.random() * 26
+      this.embers.push({
+        x: x + (Math.random() - 0.5) * 14,
+        y: y - 10 - Math.random() * 22,
+        vx: Math.cos(a) * speed * 0.7,
+        vy: Math.sin(a) * speed * 0.5 - 26,
+        life: 0.75 + Math.random() * 0.5,
+        color,
       })
     }
   }
@@ -275,7 +424,11 @@ export class Sparks {
       e.x += e.vx * dt
       e.y += e.vy * dt
       e.vy += 30 * dt
-      this.gfx.circle(e.x, e.y, 1.3 + e.life).fill({ color: 0xffb060, alpha: Math.max(0, e.life) })
+      // Clamped: a dissolve ember starts with more than a second of life, and an
+      // unclamped alpha would hold it at full opacity instead of fading from the off.
+      this.gfx
+        .circle(e.x, e.y, 1.3 + Math.min(1, e.life))
+        .fill({ color: e.color, alpha: Math.max(0, Math.min(1, e.life)) })
     }
     this.embers = this.embers.filter((e) => e.life > 0)
 
@@ -290,6 +443,57 @@ export class Sparks {
       this.gfx.circle(w.x, w.y, 6.5).fill({ color: 0xffc078, alpha: 0.25 * fade })
     }
     this.wisps = this.wisps.filter((w) => w.t < 1)
+  }
+}
+
+/**
+ * Screen shake.
+ *
+ * Translates the whole stage, which means that during a shake the picture is a few pixels
+ * off from where clicks actually land. That is a real cost and it is why the amplitude is
+ * capped low and the decay is quick: the biggest impulse in the game moves the frame 5px
+ * on a 1280px board, for under a third of a second, at a moment when the player is
+ * reacting to being hit rather than placing a post to the pixel.
+ */
+export class Shake {
+  private t = 0
+  private duration = 0
+  private amplitude = 0
+  private readonly seed = Math.random() * 100
+
+  /**
+   * Strongest impulse wins outright rather than accumulating. Three walkers reaching the
+   * porch in the same second should not multiply into a screen that will not sit still.
+   */
+  punch(amplitude: number, duration = 0.28) {
+    const remaining = this.amplitude * Math.max(0, 1 - this.t / (this.duration || 1))
+    if (amplitude <= remaining) return
+    this.amplitude = Math.min(amplitude, 5)
+    this.duration = duration
+    this.t = 0
+  }
+
+  update(dt: number, target: Container) {
+    if (this.duration <= 0) return
+
+    this.t += dt
+    if (this.t >= this.duration) {
+      this.duration = 0
+      this.amplitude = 0
+      target.position.set(0, 0)
+      return
+    }
+
+    // Quadratic decay: hits hard and gets out of the way, rather than trailing off.
+    const k = 1 - this.t / this.duration
+    const a = this.amplitude * k * k
+
+    // Two incommensurate frequencies per axis, so the frame never traces a clean circle
+    // or a straight line — either of those reads as a wobble instead of an impact.
+    target.position.set(
+      Math.sin(this.t * 61 + this.seed) * a,
+      Math.sin(this.t * 47 + this.seed * 1.7) * a * 0.8,
+    )
   }
 }
 

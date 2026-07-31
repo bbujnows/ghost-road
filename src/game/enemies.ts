@@ -20,6 +20,9 @@ import {
 import type { DamageType, EnemyKind } from './balance'
 import { damageMultiplier } from './lighting'
 import type { Light, LightingSystem } from './lighting'
+// Only `form` — several constructors here have a local `shade`, and shadowing the import
+// with a colour constant would be a genuinely nasty thing to leave lying around.
+import { form, underlit } from './shading'
 import { createRig, poseRig } from './kara'
 import { HOMESTEAD, ROAD } from './world'
 import type { Vec2 } from './world'
@@ -115,6 +118,12 @@ export abstract class Enemy {
   abstract readonly kind: EnemyKind
 
   readonly gfx = new Container()
+
+  /**
+   * The colour this comes apart into when it dies. A cold bone-grey by default, which
+   * suits everything on the road; the warm-bodied and the drowned override it.
+   */
+  readonly ash: number = 0xa8bcc8
 
   /** Fraction of a damage type this shrugs off, 0–1. Missing means none. */
   protected resists: Partial<Record<DamageType, number>> = {}
@@ -516,14 +525,15 @@ export class RoadWalker extends Enemy {
     this.armFar.position.set(-1, -H + 12)
     this.armFar.addChild(new Graphics().roundRect(-2, 0, 4, 15, 2).fill(dark))
 
-    // Robe: narrow at the shoulders, flaring to a ragged hem.
+    // Robe: narrow at the shoulders, flaring to a ragged hem. Shaded rather than flat, so
+    // the cloth catches the light at the shoulder and loses it toward the ground.
     const robe = new Graphics()
     robe
       .moveTo(-6, -H + 6)
       .quadraticCurveTo(-9, -H / 2, -11, -4)
       .lineTo(11, -4)
       .quadraticCurveTo(9, -H / 2, 6, -H + 6)
-      .fill({ color, alpha: 0.82 })
+      .fill({ fill: form(color), alpha: 0.82 })
     robe.ellipse(0, -H + 7, 8, 5.5).fill({ color, alpha: 0.9 })
     // The hood, and the nothing inside it.
     robe.ellipse(1, -H + 1, 6.5, 7).fill({ color: dark, alpha: 0.95 })
@@ -621,7 +631,7 @@ export class Crawler extends Enemy {
       .quadraticCurveTo(8, -14, 12, -10)
       .quadraticCurveTo(14, -5, 9, -2)
       .quadraticCurveTo(-3, 0, -15, -3)
-      .fill(skin)
+      .fill({ fill: form(skin) })
     // Ribs showing through.
     for (let i = 0; i < 4; i++) {
       body
@@ -672,6 +682,8 @@ export class Crawler extends Enemy {
  */
 export class TallowMan extends Enemy {
   readonly kind = 'tallowMan' as const
+  /** He is made of rendered fat. He goes out like a candle, in candle colours. */
+  readonly ash = 0xffd9a0
 
   private readonly armReach = new Container()
   private readonly wick = new Graphics()
@@ -713,7 +725,7 @@ export class TallowMan extends Enemy {
       .quadraticCurveTo(-6, -34, 0, -34)
       .quadraticCurveTo(7, -34, 11, -26)
       .quadraticCurveTo(16, -16, 14, 0)
-      .fill(wax)
+      .fill({ fill: form(wax) })
     // Runs of set wax down the near side.
     for (let i = 0; i < 4; i++) {
       const x = -8 + i * 6
@@ -835,6 +847,7 @@ export class TallowMan extends Enemy {
  */
 export class BoneDog extends Enemy {
   readonly kind = 'boneDog' as const
+  readonly ash = 0xe8e2d0
 
   private readonly spine = new Container()
   private readonly skull = new Container()
@@ -1198,7 +1211,7 @@ export class Greenbrier extends Boss {
       .quadraticCurveTo(-14, -H / 2, -16, 0)
       .lineTo(16, 0)
       .quadraticCurveTo(14, -H / 2, 6, -H + 12)
-      .fill({ color: linen, alpha: 0.88 })
+      .fill({ fill: form(linen), alpha: 0.88 })
     // Grave dirt up the hem.
     body.moveTo(-16, 0).quadraticCurveTo(0, -8, 16, 0).fill({ color: shade, alpha: 0.5 })
     // Arms hanging perfectly still. She is not reaching for anything.
@@ -1344,6 +1357,8 @@ export class Drover extends Boss {
  */
 export class DrowndGirl extends Boss {
   readonly kind = 'drownd' as const
+  /** She goes back to the water she came out of. */
+  readonly ash = 0x7fc9c4
 
   private readonly shroud = new Container()
   private readonly hair = new Graphics()
@@ -1368,7 +1383,9 @@ export class DrowndGirl extends Boss {
       .quadraticCurveTo(-13, -H / 2, -14, 0)
       .lineTo(14, 0)
       .quadraticCurveTo(13, -H / 2, 6, -H + 12)
-      .fill({ color: wet, alpha: 0.9 })
+      // Underlit, alone in the roster: she is the one thing here that brings its own
+      // light up out of the water with it, and the wet hem is where it collects.
+      .fill({ fill: underlit(wet), alpha: 0.9 })
     // It drips. Constantly.
     for (let i = 0; i < 6; i++) {
       const x = -11 + i * 4.4

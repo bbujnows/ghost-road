@@ -100,6 +100,22 @@ export function radiusForThreshold(light: Pick<Light, 'radius' | 'intensity'>, t
  */
 const AMBIENT_COLOR = 0x1a262c
 
+/**
+ * Flame flicker. **Render-only** — `lightAt()` never reads this, so nothing here can move
+ * a point across a band. That is what makes it safe to make it as lively as we like.
+ *
+ * Three incommensurate sines rather than one: a slow breath, a flutter, and a fast
+ * jitter. The weights sum to 1, so `Light.flicker` keeps its old meaning as the peak
+ * swing and no lamp's average brightness moved when this replaced the single sine.
+ */
+function flickerAt(t: number, seed: number): number {
+  return (
+    Math.sin(t * 2.3 + seed) * 0.55 +
+    Math.sin(t * 7.1 + seed * 2.7) * 0.3 +
+    Math.sin(t * 17.9 + seed * 5.1) * 0.15
+  )
+}
+
 let gradientTexture: Texture | null = null
 
 /**
@@ -154,6 +170,28 @@ export class LightingSystem {
   private clearFor(l: Light): boolean {
     if (!this.fogClear) return false
     return Math.hypot(l.x - this.fogClear.x, l.y - this.fogClear.y) <= this.fogClear.radius
+  }
+
+  /**
+   * Stable per-light flicker phase.
+   *
+   * It used to come from the light's *index* in the array, which meant two things, both
+   * wrong: a row of lanterns pulsed in visible lockstep, and removing one ward re-phased
+   * every flame after it in the list — a lamp's flame jumped when an unrelated lamp was
+   * destroyed. Keyed on the object, so it survives any churn in the array.
+   */
+  private readonly phases = new WeakMap<Light, number>()
+  private nextPhase = 0
+
+  private phaseOf(l: Light): number {
+    let p = this.phases.get(l)
+    if (p === undefined) {
+      // Golden angle: consecutive lights land as far apart in phase as they can get, so
+      // a road lined with lanterns never finds a rhythm.
+      p = (this.nextPhase++ * 2.399963) % (Math.PI * 2)
+      this.phases.set(l, p)
+    }
+    return p
   }
 
   private readonly lightLayer = new Container()
@@ -260,7 +298,7 @@ export class LightingSystem {
         continue
       }
 
-      const flicker = l.flicker ? 1 + Math.sin(this.time * 11 + i * 3.7) * l.flicker : 1
+      const flicker = l.flicker ? 1 + flickerAt(this.time, this.phaseOf(l)) * l.flicker : 1
       // Same per-light rule as lightAt(), so the picture and the gameplay agree exactly.
       const clear = this.clearFor(l)
       const rs = clear ? 1 : this.fogRadiusScale
