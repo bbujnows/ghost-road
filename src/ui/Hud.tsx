@@ -1,4 +1,5 @@
-import type { GameState } from '../game/Game'
+import { useState } from 'react'
+import type { GameState, WardId } from '../game/Game'
 import { OIL_PER_LIT_KILL, OIL_PER_WAVE } from '../game/balance'
 import { TOYS } from '../game/toys'
 import type { ToyId } from '../game/toys'
@@ -18,9 +19,9 @@ const BAND_LABEL = {
 } as const
 
 const CONTROLS = [
-  { key: '1–5', label: 'Select ward' },
+  { key: '1–7', label: 'Pick up a ward — press again to put it down' },
   { key: 'C', label: 'Ring the bell' },
-  { key: 'Left click', label: 'Place it, or pick one to upgrade' },
+  { key: 'Left click', label: 'Place it, or click one you own to upgrade' },
   { key: 'Q / E', label: 'Buy an upgrade branch' },
   { key: 'Right click', label: 'Send Kara' },
   { key: 'X', label: 'Show Belly' },
@@ -388,17 +389,31 @@ function LongRoadBrief({ state }: { state: GameState }) {
  * branch stays on screen, greyed, rather than disappearing: the player needs to see the
  * road they did not take, or the choice never registers as one.
  */
-function UpgradePanel({ state, onBuy }: { state: GameState; onBuy: (slot: number) => void }) {
+function UpgradePanel({
+  state,
+  onBuy,
+  onClose,
+}: {
+  state: GameState
+  onBuy: (slot: number) => void
+  onClose: () => void
+}) {
   const sel = state.selection
   if (!sel) return null
 
   const committed = sel.branches.some((b) => b.tier > 0)
+  const name =
+    sel.kind === 'lantern' ? 'Lantern Post' : sel.kind === 'fiddler' ? 'The Fiddler' : 'Cold Iron'
 
   return (
     <div className="panel upgrades">
       <span className="label">
-        {sel.kind === 'lantern' ? 'Lantern Post' : 'Cold Iron'}
-        <span className="upgrade-hint"> — Esc to close</span>
+        {name}
+        {/* A visible way out. "Esc to close" was the only exit and it was a hint, not a
+            button — which stranded a player who could not afford either branch. */}
+        <button type="button" className="panel-close" onClick={onClose} title="Close (Esc)">
+          ✕
+        </button>
       </span>
 
       {sel.branches.map((b, i) => (
@@ -434,6 +449,159 @@ function UpgradePanel({ state, onBuy }: { state: GameState; onBuy: (slot: number
   )
 }
 
+/**
+ * Everything in the game and what it actually does.
+ *
+ * The numbered rules teach the loop; this teaches the *objects*. A player who wants to
+ * know what the ball is for, or why their salt ran out, has nowhere else to look — and
+ * "read the tooltip on a thing you have not bought yet" is not an answer.
+ */
+function Reference() {
+  return (
+    <>
+      <p className="eyebrow">The wards</p>
+      <dl className="ref">
+        <dt>Lantern Post <span className="ref-cost">15</span></dt>
+        <dd>
+          Light, and <em>no damage at all</em>. The inner ring of the placement preview is where its
+          light is strong enough to fight in. Upgrades: <em>Storm Glass</em> (bigger, and eventually
+          impossible to blow out) or <em>Mirror Back</em> (the same light stretched along the road
+          instead of into the trees).
+        </dd>
+
+        <dt>Cold Iron <span className="ref-cost">25</span></dt>
+        <dd>
+          A board of nails laid along the road. Bites everything standing on it —{' '}
+          <em>but only in light</em>. Laying it in the dark is legal and useless until you light it.
+          Upgrades: <em>Graveyard Iron</em> (much harder bite, and at the top it takes anything you
+          can merely see) or <em>Rail Iron</em> (longer, and rough enough to wade through).
+        </dd>
+
+        <dt>Salt Line <span className="ref-cost">20</span></dt>
+        <dd>
+          Laid <em>across</em> the road. 25 damage and a slow to anything that crosses it, and{' '}
+          <strong>it works in total darkness</strong> — the only thing that does.{' '}
+          <strong>Eight crossings and it is gone.</strong> A kill outside the light also pays half
+          the oil, so salt buys you a lane you could not afford to light and keeps you unable to
+          light it.
+        </dd>
+
+        <dt>Spring Line <span className="ref-cost">45</span></dt>
+        <dd>
+          Running water. They will not walk through it — put it on the road and they crawl round the
+          edge, put it beside the road and they bulge past. Deals nothing. Its real job:{' '}
+          <strong>a lantern standing in the mist throws 35% further.</strong> Kara plays in it and
+          heals while she does.
+        </dd>
+
+        <dt>Bottle Tree <span className="ref-cost">45</span></dt>
+        <dd>
+          Three bottles. Each catches one thing for four seconds and hurts it on release. Its damage
+          is <em>light</em>, which matters against anything that shrugs off iron.
+        </dd>
+
+        <dt>The Fiddler <span className="ref-cost">55</span></dt>
+        <dd>
+          +20% damage to every ward near him. <strong>He runs if anything gets close</strong>, so
+          the best place for the music is never the best place for him. Upgrades:{' '}
+          <em>Wayfaring Stranger</em> (carries further) or <em>Shady Grove</em> (Kara moves faster
+          while he plays).
+        </dd>
+
+        <dt>Church Bell <span className="ref-cost">65</span></dt>
+        <dd>
+          One per map. Press <kbd>C</kbd> to ring it: everything on the board stops for 2.5s and
+          becomes visible for 6s. <strong>It never kills</strong> — it buys you sight and a held
+          breath. It also deafens Kara for 3 seconds, so you cannot ring it and read her ears.
+        </dd>
+      </dl>
+
+      <p className="eyebrow">Kara</p>
+      <dl className="ref">
+        <dt>Ear-Perk <span className="ref-cost">always</span></dt>
+        <dd>
+          She lifts her ears and turns about two seconds before something becomes visible. Nothing
+          on the HUD tells you this — <strong>watch her</strong>. It is the only radar you get, and
+          on one night something starts lying to her.
+        </dd>
+        <dt>Show Belly <kbd>X</kbd></dt>
+        <dd>
+          She rolls onto her back and her white belly lights a huge circle — bigger than a lantern's
+          whole pool, anywhere she can stand. She is helpless for two seconds and takes double
+          damage. It is also the answer to a wind gust.
+        </dd>
+        <dt>Bubbles <kbd>B</kbd></dt>
+        <dd>
+          She chases one at nearly twice her walking speed — her fastest way across the map. The
+          bubble glows enough to <em>reveal</em> and never enough to kill.
+        </dd>
+        <dt>The Blanket <kbd>Z</kbd></dt>
+        <dd>
+          She ducks under the porch quilt: nothing can touch her, and she can do nothing. Three
+          seconds minimum, three more to coax her out. Watch for the one white paw sticking out.
+        </dd>
+        <dt>Hold <kbd>H</kbd></dt>
+        <dd>
+          Needs the Rope. She plants herself and nothing gets past her for up to 8 seconds. It costs
+          her health the whole time she is being pushed.
+        </dd>
+        <dt>Lead <kbd>L</kbd></dt>
+        <dd>
+          The Seventh Night only, and only if she loves you enough. The fog lifts where she walks.
+        </dd>
+      </dl>
+
+      <p className="eyebrow">The ball, and the two things she brings home</p>
+      <dl className="ref">
+        <dt>The dropped ball <kbd>T</kbd></dt>
+        <dd>
+          Once a night, in the middle of a wave, she drops a ball at your feet and looks at you.
+          Throwing it costs a few seconds of her being out of position and earns{' '}
+          <strong>+3 bond</strong>. Ignoring it for six seconds costs <strong>−2</strong>. The
+          timing is deliberately inconvenient — that is the whole point of it.
+        </dd>
+        <dt>Fetching <kbd>G</kbd></dt>
+        <dd>
+          Every three kills she goes out into the dark and drags something back:{' '}
+          <strong>stash</strong>, spent between nights on toys and permanent upgrades. Each trip is
+          six seconds she is not defending anything. Turn it off when you need her.
+        </dd>
+        <dt>Bond</dt>
+        <dd>
+          How well you have looked after her. It buys <em>her</em>, not your defenses — better
+          hearing, a faster roll, a quicker recovery, and finally Lead. Earned by throwing the ball,
+          feeding her, letting her play in the water, and finishing a night without her getting
+          hurt. <strong>Bond earned on a night you lose is not kept.</strong>
+        </dd>
+      </dl>
+
+      <p className="eyebrow">Things on the road</p>
+      <dl className="ref">
+        <dt>Road Walker</dt>
+        <dd>The baseline. Light plus iron.</dd>
+        <dt>Crawler</dt>
+        <dd>Fast and flimsy. One lit strip kills it — but it crosses a gap before you can patch it.</dd>
+        <dt>Tallow Man</dt>
+        <dd>
+          Pinches your lanterns out for eight seconds. A post set back from the road is out of his
+          reach, and Kara standing over one will run him off it.
+        </dd>
+        <dt>Bone Dog</dt>
+        <dd>
+          Ignores the homestead and comes for her. Put her under the blanket — or walk her across
+          your iron and let the strip have it.
+        </dd>
+        <dt>The Unseen</dt>
+        <dd>Barely there even in good light. Her ears, or the bell.</dd>
+        <dt>The Fetch</dt>
+        <dd>
+          Three copies of Kara with <strong>no white on them anywhere</strong>. Find the paws.
+        </dd>
+      </dl>
+    </>
+  )
+}
+
 export interface HudProps {
   state: GameState | null
   onBegin: () => void
@@ -441,7 +609,7 @@ export interface HudProps {
   onResume: () => void
   onRestart: () => void
   onToggleSpeed: () => void
-  onSelectWard: (id: GameState['selectedWard']) => void
+  onSelectWard: (id: WardId) => void
   onRingBell: () => void
   onBuyUpgrade: (slot: number) => void
   onRestartCampaign: () => void
@@ -452,6 +620,7 @@ export interface HudProps {
   onToggleFetching: () => void
   onSetHard: (hard: boolean) => void
   onAbandon: () => void
+  onClearTool: () => void
 }
 
 /**
@@ -584,7 +753,11 @@ export function Hud({
   onToggleFetching,
   onSetHard,
   onAbandon,
+  onClearTool,
 }: HudProps) {
+  // Which half of the help sheet is showing. Hooks must run before any early return.
+  const [helpTab, setHelpTab] = useState<'rules' | 'reference'>('rules')
+
   if (!state) return null
 
   const hpPct = (state.homesteadHp / state.homesteadMaxHp) * 100
@@ -671,11 +844,12 @@ export function Hud({
       </div>
 
       <div className="hud-bottom">
-        {/* The upgrade panel takes the shop's place rather than sitting beside it — the
-            bottom bar is already three panels wide, and a selected ward is a mode. */}
-        {state.selection ? (
-          <UpgradePanel state={state} onBuy={onBuyUpgrade} />
-        ) : (
+        {/* ⚠ The upgrade panel used to *replace* the shop, and that was a trap: with a ward
+            selected and nothing affordable, there was no shop to click and no visible way
+            back — the player was stuck looking at an upgrade they could not buy. It now
+            sits beside the shop and carries its own Close. */}
+        {state.selection && <UpgradePanel state={state} onBuy={onBuyUpgrade} onClose={onClearTool} />}
+
         <div className="panel wards">
           {state.wards.map((w, i) => (
             <div
@@ -700,11 +874,15 @@ export function Hud({
               </span>
             </div>
           )}
+          {/* Says what the next click will actually do. With no tool held that is
+              "nothing", and the player should be able to see that at a glance. */}
           <span className="hint">
-            {state.placementBlocker ? (
+            {!state.selectedWard ? (
+              <span className="idle-hint">Nothing in hand — pick a ward to build</span>
+            ) : state.placementBlocker ? (
               <span className="blocked">{state.placementBlocker}</span>
             ) : (
-              'Click to place it here'
+              'Click to place it here · Esc to put it down'
             )}
           </span>
           {/* A superb build tool and a tell that does the player's reading for them. The
@@ -715,7 +893,6 @@ export function Hud({
             </span>
           )}
         </div>
-        )}
 
         <KaraPanel state={state} onToggleFetching={onToggleFetching} />
       </div>
@@ -833,8 +1010,25 @@ export function Hud({
       {state.helpOpen && (
         <div className="veil">
           <div className="sheet">
-            <p className="eyebrow">How to hold the night</p>
-            <Rules state={state} />
+            <div className="modes help-tabs">
+              <button
+                type="button"
+                className={`mode ${helpTab === 'rules' ? 'on' : ''}`}
+                onClick={() => setHelpTab('rules')}
+              >
+                How to hold the night
+              </button>
+              <button
+                type="button"
+                className={`mode ${helpTab === 'reference' ? 'on' : ''}`}
+                onClick={() => setHelpTab('reference')}
+              >
+                What everything does
+              </button>
+            </div>
+
+            {helpTab === 'rules' ? <Rules state={state} /> : <Reference />}
+
             <div className="control-grid">
               {CONTROLS.map((c) => (
                 <div key={c.key} className="control">
@@ -843,8 +1037,8 @@ export function Hud({
                 </div>
               ))}
               <div className="control">
-                <kbd>R</kbd>
-                <span>Retry, after a loss</span>
+                <kbd>Esc</kbd>
+                <span>Put the tool down</span>
               </div>
             </div>
             <button type="button" className="primary" onClick={onToggleHelp}>

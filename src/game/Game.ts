@@ -187,7 +187,8 @@ export interface GameState {
   homesteadHp: number
   homesteadMaxHp: number
   oil: number
-  selectedWard: WardId
+  /** Null when no tool is held — the left button will not build. */
+  selectedWard: WardId | null
   canAffordSelected: boolean
   walkersAlive: number
   /** Seconds until the next wave, during a break. */
@@ -401,7 +402,15 @@ export class Game {
   }
   private bubbles: Bubble[] = []
   private bellyLight!: Light
-  private selectedWard: WardId = 'lantern'
+  /**
+   * The ward the next left click would build, or **null for no tool at all**.
+   *
+   * ⚠ It used to default to `'lantern'` and stay on whatever was last picked, forever.
+   * That made the left mouse button permanently armed: every stray click on the board spent
+   * oil, and there was no way to put the tool down. A build cursor with no neutral state is
+   * a trap, and this one caught its own author's playtester within a night.
+   */
+  private selectedWard: WardId | null = null
   private preview = new Graphics()
   /** Separate from the preview: this one carries a transform, that one does not. */
   private highlight = new Graphics()
@@ -558,7 +567,9 @@ export class Game {
 
   private bindInput() {
     const canvas = this.app.canvas
-    canvas.style.cursor = 'crosshair'
+    // Set per frame in renderPasses: a crosshair means the click will spend oil, an arrow
+    // means it will not. The cursor is the honest readout of what the mouse is armed with.
+    canvas.style.cursor = 'default'
 
     const toWorld = (e: MouseEvent) => {
       const r = canvas.getBoundingClientRect()
@@ -582,8 +593,11 @@ export class Game {
       // ambiguous: on one, it selects it; anywhere else, it builds and clears the
       // selection. No modal state, and no click that does nothing.
       const hit = this.wardAt(p.x, p.y)
-      if (hit) this.selected = hit
-      else {
+      if (hit) {
+        this.selected = hit
+        // Inspecting something you own is not building, so put the tool down.
+        this.selectedWard = null
+      } else {
         this.selected = null
         this.placeWard(p.x, p.y)
       }
@@ -630,9 +644,9 @@ export class Game {
         // The two branches of whatever is selected, left and right.
         this.buyUpgrade(key === 'q' ? 0 : 1)
       } else if (key === 'escape') {
-        // Escape always means "get me out of this overlay".
+        // Escape always means "get me out of this". Overlay first, then the tool.
         if (this.helpOpen || this.paused) this.resume()
-        else this.selected = null
+        else this.clearTool()
       } else if (key === 'r') {
         if (this.phase === 'failed' || this.phase === 'complete') this.restart()
         // Mid-night, R only works from the pause screen. Bound to the live board it would
@@ -839,8 +853,17 @@ export class Game {
     return this.paused || this.helpOpen || this.phase === 'briefing'
   }
 
+  /** Picking the ward already held puts it down, so the shop is its own off switch. */
   selectWard(id: WardId) {
-    this.selectedWard = id
+    this.selectedWard = this.selectedWard === id ? null : id
+    // You cannot inspect and build at the same time; picking a tool closes the panel.
+    if (this.selectedWard) this.selected = null
+  }
+
+  /** Escape, and anything else that means "I did not want to be holding this". */
+  clearTool() {
+    this.selectedWard = null
+    this.selected = null
   }
 
   /** The placed ward under a point, lanterns first — their lamps sit above the road. */
@@ -963,6 +986,8 @@ export class Game {
 
   /** Why the selected ward cannot go here, or null if it can. */
   private placementBlocker(x: number, y: number): string | null {
+    // Nothing held, so nothing is blocked — the click will simply not build.
+    if (!this.selectedWard) return null
     if (this.phase === 'briefing') return 'read the briefing first'
     // Without this you can spend oil on a frozen board.
     if (this.paused || this.helpOpen) return 'paused'
@@ -1207,6 +1232,7 @@ export class Game {
   }
 
   private placeWard(x: number, y: number) {
+    if (!this.selectedWard) return
     if (this.placementBlocker(x, y) !== null) return
 
     this.oil -= this.wardCost(this.selectedWard)
@@ -1259,6 +1285,10 @@ export class Game {
       this.bell = new ChurchBell(x, y)
       this.actors.addChild(this.bell.gfx)
     }
+
+    // Tool down after every placement. Building two of something is two deliberate picks,
+    // which is a small cost against a cursor that spends oil every time it is bumped.
+    this.selectedWard = null
   }
 
   private get night(): NightSpec {
@@ -2031,6 +2061,11 @@ export class Game {
   /** Lightmap, bloom, motes, sparks, placement preview — the passes that run every frame. */
   private renderPasses(dt: number) {
     this.sortActors()
+    this.app.canvas.style.cursor = this.selectedWard
+      ? 'crosshair'
+      : this.wardAt(this.pointer.x, this.pointer.y)
+        ? 'pointer'
+        : 'default'
     this.lighting.update(this.app.renderer, dt)
     this.weather.update(dt, this.night.fog)
     this.motes.update(dt, (x, y) => this.lighting.lightAt(x, y))
@@ -2072,7 +2107,7 @@ export class Game {
       homesteadMaxHp: this.homesteadMax,
       oil: Math.floor(this.oil),
       selectedWard: this.selectedWard,
-      canAffordSelected: this.oil >= this.wardCost(this.selectedWard),
+      canAffordSelected: !this.selectedWard || this.oil >= this.wardCost(this.selectedWard),
       walkersAlive: this.enemies.length,
       breakRemaining: Math.max(0, this.breakTimer),
       paused: this.paused,

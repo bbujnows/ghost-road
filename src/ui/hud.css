@@ -65,6 +65,11 @@
   color: #ff8f6b;
 }
 
+.idle-hint {
+  color: #6c7a78;
+  font-style: italic;
+}
+
 .meter {
   height: 6px;
   width: 130px;
@@ -742,6 +747,83 @@ kbd {
 
 .ring-dim {
   color: #8fa9b8;
+}
+
+/* ── The reference page ──────────────────────────────────────────────────── */
+
+.help-tabs {
+  margin-bottom: 16px;
+}
+
+.ref {
+  margin: 0 0 18px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;
+}
+
+.ref dt {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: #eae7de;
+}
+
+.ref dt:first-child {
+  margin-top: 0;
+}
+
+.ref dd {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #97a5a2;
+}
+
+.ref dd em {
+  color: #b9c4c1;
+  font-style: italic;
+}
+
+.ref dd strong {
+  color: #d8dbd4;
+  font-weight: 600;
+}
+
+.ref-cost {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7d8c8a;
+}
+
+.ref dt kbd,
+.ref dd kbd {
+  font-size: 9.5px;
+}
+
+/* The upgrade panel's way out. It sits beside the shop now, not on top of it. */
+.panel-close {
+  pointer-events: auto;
+  margin-left: auto;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  color: #6c7a78;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.panel-close:hover {
+  color: #ffc078;
+}
+
+.upgrades .label {
+  display: flex;
+  align-items: center;
 }
 
 .control-grid {

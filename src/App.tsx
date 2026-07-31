@@ -47,6 +47,7 @@ export default function App() {
   const toggleFetching = useCallback(() => gameRef.current?.toggleFetching(), [])
   const setHard = useCallback((hard: boolean) => gameRef.current?.setHard(hard), [])
   const abandon = useCallback(() => gameRef.current?.abandonNight(), [])
+  const clearTool = useCallback(() => gameRef.current?.clearTool(), [])
 
   return (
     <div className="app">
@@ -70,6 +71,7 @@ export default function App() {
           onToggleFetching={toggleFetching}
           onSetHard={setHard}
           onAbandon={abandon}
+          onClearTool={clearTool}
         />
       </div>
     </div>
